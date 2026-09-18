@@ -14,22 +14,21 @@ const io = new Server(server, {
   }
 });
 
-// Self-ping every 10 minutes to keep Render instance awake
+// Self-ping to keep Render free tier awake
 setInterval(() => {
   https.get('https://text-p3e7.onrender.com/', (res) => {
-    console.log('Self-ping sent to keep server alive.');
+    console.log('Self-ping sent.');
   }).on('error', (err) => {
     console.error('Self-ping failed:', err.message);
   });
 }, 10 * 60 * 1000);
 
-// Transporter setup for sending emails using Nodemailer
-// Set EMAIL_USER and EMAIL_PASS environment variables on Render, or put testing SMTP credentials here
+// Configure Email Transporter (Gmail App Password)
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: process.env.EMAIL_USER || 'your-gmail@gmail.com',
-    pass: process.env.EMAIL_PASS || 'your-app-password'
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
   }
 });
 
@@ -37,26 +36,20 @@ const transporter = nodemailer.createTransport({
 const ADMIN_USER = "Meelad Mohammad";
 const ADMIN_PASS = "@Meelad@786@786";
 
-// Users database: { username: { password: "...", email: "...", verified: true/false } }
+// Users database
 const users = {
   [ADMIN_USER]: { password: ADMIN_PASS, email: "admin@globalchat.com", verified: true }
 };
 
-// Pending email verifications: { email: { code: "123456", username, password } }
+// Pending verifications store: { email: { code, username, password, lastSent } }
 const pendingVerifications = {};
-
-// Banned usernames set
 const bannedUsers = new Set();
-
-// Active sockets map: { username: socketId }
 const activeSockets = {};
 
-// Group rooms
 const rooms = {
   "International Talk": { password: null, owner: "System" }
 };
 
-// Message history
 const messageHistory = {
   "International Talk": []
 };
@@ -67,7 +60,7 @@ app.get('/', (req, res) => {
 
 io.on('connection', (socket) => {
 
-  // Step 1: Request Registration Verification Code
+  // Step 1: Request Email Verification Code
   socket.on('request code', ({ username, email, password }, callback) => {
     if (!username || !email || !password) {
       return callback({ success: false, message: 'All fields are required.' });
@@ -78,43 +71,55 @@ io.on('connection', (socket) => {
     }
 
     if (users[username]) {
-      return callback({ success: false, message: 'Username already registered. Please sign in.' });
+      return callback({ success: false, message: 'Username already registered.' });
     }
 
-    // Generate 6-digit verification code
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    pendingVerifications[email] = { code, username, password };
+    // Rate Limiting: 30 Seconds Cooldown per email
+    const now = Date.now();
+    if (pendingVerifications[email] && (now - pendingVerifications[email].lastSent < 30000)) {
+      const remainingSeconds = Math.ceil((30000 - (now - pendingVerifications[email].lastSent)) / 1000);
+      return callback({ 
+        success: false, 
+        message: `Please wait ${remainingSeconds} seconds before requesting a new code.` 
+      });
+    }
 
-    // Send verification email
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    pendingVerifications[email] = { code, username, password, lastSent: now };
+
+    // Check if email environment variables are missing
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+      console.log(`\n--- [TEST MODE CODE] Verification code for ${email} is: ${code} ---\n`);
+      return callback({ 
+        success: true, 
+        message: `[TEST MODE] Code generated! (Check Render logs if EMAIL_USER environment variable isn't set).` 
+      });
+    }
+
     const mailOptions = {
-      from: '"Global Chat App" <no-reply@globalchat.com>',
+      from: `"Global Chat" <${process.env.EMAIL_USER}>`,
       to: email,
-      subject: 'Your Global Chat Verification Code',
+      subject: 'Your Verification Code',
       html: `
-        <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f4f4f9;">
-          <h2 style="color: #075e54;">Global Chat Email Verification</h2>
+        <div style="font-family: Arial, sans-serif; padding: 20px;">
+          <h2 style="color: #075e54;">Global Chat Sign-Up</h2>
           <p>Hello <b>${username}</b>,</p>
-          <p>Your 6-digit verification code to complete sign-up is:</p>
-          <h1 style="color: #25d366; letter-spacing: 5px;">${code}</h1>
-          <p>This code will expire shortly.</p>
+          <p>Your verification code is:</p>
+          <h1 style="color: #25d366; letter-spacing: 4px;">${code}</h1>
         </div>
       `
     };
 
-    transporter.sendMail(mailOptions, (error, info) => {
+    transporter.sendMail(mailOptions, (error) => {
       if (error) {
         console.error('Email error:', error);
-        // Fallback for development if SMTP fails: displays code in server console/callback
-        return callback({ 
-          success: false, 
-          message: 'Failed to send email. Check SMTP settings or check server logs.' 
-        });
+        return callback({ success: false, message: 'Failed to send verification email. Check SMTP setup.' });
       }
       callback({ success: true, message: 'Verification code sent to your email!' });
     });
   });
 
-  // Step 2: Verify Code and Complete Registration
+  // Step 2: Verify Code
   socket.on('verify code', ({ email, code }, callback) => {
     const pending = pendingVerifications[email];
 
@@ -126,7 +131,6 @@ io.on('connection', (socket) => {
       return callback({ success: false, message: 'Invalid verification code.' });
     }
 
-    // Register user
     users[pending.username] = {
       password: pending.password,
       email: email,
@@ -134,27 +138,25 @@ io.on('connection', (socket) => {
     };
 
     delete pendingVerifications[email];
-    callback({ success: true, message: 'Email verified! You can now sign in.' });
+    callback({ success: true, message: 'Account verified successfully!' });
   });
 
-  // Login Handler
+  // Sign In
   socket.on('login', ({ username, password }, callback) => {
     if (!username || !password) {
       return callback({ success: false, message: 'Name and Password are required.' });
     }
 
     if (bannedUsers.has(username)) {
-      return callback({ success: false, message: 'Your account has been banned by the Admin.' });
+      return callback({ success: false, message: 'Your account is banned.' });
     }
 
     const user = users[username];
 
     if (username === ADMIN_USER) {
-      if (password !== ADMIN_PASS) {
-        return callback({ success: false, message: 'Incorrect Admin password.' });
-      }
+      if (password !== ADMIN_PASS) return callback({ success: false, message: 'Incorrect Admin password.' });
     } else if (!user) {
-      return callback({ success: false, message: 'User not found. Please create an account.' });
+      return callback({ success: false, message: 'User not found. Please register first.' });
     } else if (user.password !== password) {
       return callback({ success: false, message: 'Incorrect password.' });
     }
@@ -174,8 +176,8 @@ io.on('connection', (socket) => {
   socket.on('create room', ({ roomName, roomPassword }, callback) => {
     const username = socket.data.username;
     if (!username) return callback({ success: false, message: 'Must be logged in.' });
-    if (!roomName) return callback({ success: false, message: 'Group Name is required.' });
-    if (rooms[roomName]) return callback({ success: false, message: 'Group name already exists.' });
+    if (!roomName) return callback({ success: false, message: 'Group Name required.' });
+    if (rooms[roomName]) return callback({ success: false, message: 'Group already exists.' });
 
     rooms[roomName] = { password: roomPassword || null, owner: username };
     messageHistory[roomName] = [];
@@ -186,19 +188,18 @@ io.on('connection', (socket) => {
   // Join Room
   socket.on('join room', ({ roomName, roomPassword }, callback) => {
     const username = socket.data.username;
-    if (!username) return callback({ success: false, message: 'You must be signed in.' });
+    if (!username) return callback({ success: false, message: 'Must be logged in.' });
 
     const room = rooms[roomName];
     if (!room) return callback({ success: false, message: 'Group does not exist.' });
 
     if (!socket.data.isAdmin && room.password && room.password !== roomPassword) {
-      return callback({ success: false, message: 'Incorrect group password.' });
+      return callback({ success: false, message: 'Incorrect room password.' });
     }
 
     if (socket.data.currentRoom) {
       const oldRoom = socket.data.currentRoom;
       socket.leave(oldRoom);
-
       const leaveMsg = { username: 'System', text: `${username} has left ${oldRoom}.`, system: true };
       saveMessage(oldRoom, leaveMsg);
       io.to(oldRoom).emit('chat message', leaveMsg);
@@ -208,7 +209,7 @@ io.on('connection', (socket) => {
     socket.data.currentRoom = roomName;
 
     const history = messageHistory[roomName] || [];
-    callback({ success: true, history: history });
+    callback({ success: true, history });
 
     const joinMsg = { username: 'System', text: `${username} joined ${roomName}.`, system: true };
     saveMessage(roomName, joinMsg);
@@ -221,9 +222,9 @@ io.on('connection', (socket) => {
     const room = rooms[roomName];
 
     if (!room) return callback({ success: false, message: 'Group does not exist.' });
-    if (roomName === "International Talk") return callback({ success: false, message: 'International Talk cannot be deleted.' });
+    if (roomName === "International Talk") return callback({ success: false, message: 'Cannot delete International Talk.' });
     if (room.owner !== username && !socket.data.isAdmin) {
-      return callback({ success: false, message: 'Only the group owner or Admin can delete this group.' });
+      return callback({ success: false, message: 'Unauthorized.' });
     }
 
     delete rooms[roomName];
@@ -233,21 +234,21 @@ io.on('connection', (socket) => {
     callback({ success: true });
   });
 
-  // Chat Message
+  // Message Handler
   socket.on('chat message', (msgText) => {
     const room = socket.data.currentRoom;
     const username = socket.data.username;
 
     if (!room || !username || bannedUsers.has(username)) return;
 
-    const msgData = { username: username, text: msgText, senderId: socket.id, system: false };
+    const msgData = { username, text: msgText, senderId: socket.id, system: false };
     saveMessage(room, msgData);
     io.to(room).emit('chat message', msgData);
   });
 
-  // Admin Data Request
+  // Admin Data
   socket.on('admin get data', (callback) => {
-    if (!socket.data.isAdmin) return callback({ success: false, message: 'Unauthorized' });
+    if (!socket.data.isAdmin) return callback({ success: false });
     callback({
       success: true,
       activeUsers: Object.keys(activeSockets),
@@ -263,7 +264,7 @@ io.on('connection', (socket) => {
     if (targetSocketId) {
       const targetSocket = io.sockets.sockets.get(targetSocketId);
       if (targetSocket) {
-        targetSocket.emit('kicked', 'You have been kicked by the Admin.');
+        targetSocket.emit('kicked', 'Kicked by Admin.');
         targetSocket.disconnect();
       }
       delete activeSockets[targetUser];
@@ -278,7 +279,7 @@ io.on('connection', (socket) => {
     if (targetSocketId) {
       const targetSocket = io.sockets.sockets.get(targetSocketId);
       if (targetSocket) {
-        targetSocket.emit('kicked', 'You have been banned by the Admin.');
+        targetSocket.emit('kicked', 'Banned by Admin.');
         targetSocket.disconnect();
       }
       delete activeSockets[targetUser];
