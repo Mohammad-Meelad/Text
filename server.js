@@ -1,5 +1,6 @@
 const express = require('express');
 const http = require('http');
+const https = require('https');
 const { Server } = require('socket.io');
 
 const app = express();
@@ -12,10 +13,19 @@ const io = new Server(server, {
   }
 });
 
-// Store registered users: { username: password }
+// Self-ping every 10 minutes to help keep Render instance awake
+setInterval(() => {
+  https.get('https://text-p3e7.onrender.com/', (res) => {
+    console.log('Self-ping sent to keep server alive.');
+  }).on('error', (err) => {
+    console.error('Self-ping failed:', err.message);
+  });
+}, 10 * 60 * 1000);
+
+// Registered users: { username: password }
 const users = {};
 
-// Store rooms data: { roomName: { password: "...", owner: "username" } }
+// Group rooms: { roomName: { password: "...", owner: "username" } }
 const rooms = {
   "International Talk": { password: null, owner: "System" }
 };
@@ -42,7 +52,6 @@ io.on('connection', (socket) => {
 
     socket.data.username = username;
     
-    // Send back current rooms and public properties (excluding passwords)
     const roomList = Object.keys(rooms).map(name => ({
       name: name,
       hasPassword: !!rooms[name].password,
@@ -86,12 +95,10 @@ io.on('connection', (socket) => {
       return callback({ success: false, message: 'Group does not exist.' });
     }
 
-    // Password Check
     if (room.password && room.password !== roomPassword) {
       return callback({ success: false, message: 'Incorrect group password.' });
     }
 
-    // Leave Current Room
     if (socket.data.currentRoom) {
       socket.leave(socket.data.currentRoom);
       io.to(socket.data.currentRoom).emit('chat message', {
@@ -101,7 +108,6 @@ io.on('connection', (socket) => {
       });
     }
 
-    // Join New Room
     socket.join(roomName);
     socket.data.currentRoom = roomName;
 
@@ -133,9 +139,7 @@ io.on('connection', (socket) => {
 
     delete rooms[roomName];
 
-    // Notify clients inside the room that it was deleted
     io.to(roomName).emit('room deleted', roomName);
-
     broadcastRoomList();
     callback({ success: true });
   });
