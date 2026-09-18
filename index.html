@@ -69,7 +69,7 @@
       background: white;
       padding: 25px;
       border-radius: 12px;
-      width: 320px;
+      width: 340px;
       display: flex;
       flex-direction: column;
       gap: 12px;
@@ -129,6 +129,41 @@
       display: none;
     }
 
+    /* Admin Panel Styling */
+    .admin-modal-box {
+      width: 500px;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    .admin-section {
+      border: 1px solid #ddd;
+      padding: 10px;
+      border-radius: 6px;
+      margin-bottom: 10px;
+    }
+    .admin-section h4 {
+      margin: 0 0 8px 0;
+      color: #075e54;
+    }
+    .admin-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0;
+      border-bottom: 1px solid #eee;
+      font-size: 13px;
+    }
+    .btn-danger {
+      background-color: #d9534f;
+      color: white;
+      border: none;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .btn-danger:hover { background-color: #c9302c; }
+
     /* Main Layout */
     #app-container {
       display: none;
@@ -156,6 +191,20 @@
       color: white;
       padding: 15px;
       font-weight: bold;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #admin-panel-btn {
+      display: none;
+      background-color: #ff9800;
+      color: white;
+      border: none;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: bold;
+      cursor: pointer;
     }
     #open-create-modal-btn {
       margin: 10px;
@@ -168,9 +217,7 @@
       font-weight: bold;
       transition: background 0.2s ease;
     }
-    #open-create-modal-btn:hover {
-      background-color: #0d6e63;
-    }
+    #open-create-modal-btn:hover { background-color: #0d6e63; }
     #room-list {
       flex: 1;
       overflow-y: auto;
@@ -186,7 +233,6 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      transition: background 0.15s ease;
     }
     .room-item:hover { background-color: #e9edef; }
     .room-item.active { background-color: #d9fdd3; font-weight: bold; }
@@ -263,7 +309,7 @@
     </div>
   </div>
 
-  <!-- Modal 2: Animated Create Group Pop-up -->
+  <!-- Modal 2: Create Group Pop-up -->
   <div id="create-modal" class="modal-overlay" style="display: none;">
     <div class="modal-box">
       <h3>✨ Create Group</h3>
@@ -277,7 +323,7 @@
     </div>
   </div>
 
-  <!-- Modal 3: Animated Password Pop-up -->
+  <!-- Modal 3: Password Pop-up -->
   <div id="join-pass-modal" class="modal-overlay" style="display: none;">
     <div class="modal-box">
       <h3 id="join-modal-title">Enter Group Password</h3>
@@ -290,11 +336,38 @@
     </div>
   </div>
 
+  <!-- Modal 4: Admin Panel -->
+  <div id="admin-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-box admin-modal-box">
+      <h3>🛡️ Admin Panel</h3>
+      
+      <div class="admin-section">
+        <h4>Active Online Users</h4>
+        <div id="admin-active-users"></div>
+      </div>
+
+      <div class="admin-section">
+        <h4>Banned Users</h4>
+        <div id="admin-banned-users"></div>
+      </div>
+
+      <div class="admin-section">
+        <h4>Clear Group Chat History</h4>
+        <div id="admin-room-list"></div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="admin-close-btn" class="btn-secondary">Close Panel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Main Application UI -->
   <div id="app-container">
     <div id="sidebar">
       <div id="sidebar-header">
         <span id="user-display">My Chat Application</span>
+        <button id="admin-panel-btn">🛡️ Admin</button>
       </div>
       <button id="open-create-modal-btn">+ Create New Group</button>
       <ul id="room-list"></ul>
@@ -320,14 +393,16 @@
 
     let activeRoom = null;
     let currentUser = null;
+    let isAdminUser = false;
     let pendingJoinRoom = null;
     let availableRooms = [];
 
-    // UI Elements
+    // Elements
     const loadingScreen = document.getElementById('loading-screen');
     const loginModal = document.getElementById('login-modal');
     const createModal = document.getElementById('create-modal');
     const joinPassModal = document.getElementById('join-pass-modal');
+    const adminModal = document.getElementById('admin-modal');
     const appContainer = document.getElementById('app-container');
 
     const loginUsername = document.getElementById('login-username');
@@ -350,6 +425,12 @@
     const openCreateModalBtn = document.getElementById('open-create-modal-btn');
     const roomListEl = document.getElementById('room-list');
     const userDisplay = document.getElementById('user-display');
+    const adminPanelBtn = document.getElementById('admin-panel-btn');
+    const adminCloseBtn = document.getElementById('admin-close-btn');
+
+    const adminActiveUsers = document.getElementById('admin-active-users');
+    const adminBannedUsers = document.getElementById('admin-banned-users');
+    const adminRoomList = document.getElementById('admin-room-list');
 
     const headerRoomTitle = document.getElementById('header-room-title');
     const headerRoomDesc = document.getElementById('header-room-desc');
@@ -358,7 +439,6 @@
     const messageInput = document.getElementById('message-input');
     const sendBtn = document.getElementById('send-btn');
 
-    // Remove loading screen on backend connection
     socket.on('connect', () => {
       loadingScreen.style.display = 'none';
       if (!currentUser) {
@@ -366,7 +446,7 @@
       }
     });
 
-    // Sign In Action
+    // Sign In
     loginBtn.addEventListener('click', () => {
       const username = loginUsername.value.trim();
       const password = loginPassword.value.trim();
@@ -374,9 +454,15 @@
       socket.emit('login', { username, password }, (res) => {
         if (res.success) {
           currentUser = username;
+          isAdminUser = res.isAdmin;
+
           loginModal.style.display = 'none';
           appContainer.style.display = 'flex';
-          userDisplay.textContent = `User: ${username}`;
+          userDisplay.textContent = username;
+
+          if (isAdminUser) {
+            adminPanelBtn.style.display = 'inline-block';
+          }
 
           availableRooms = res.rooms;
           renderRoomList(availableRooms);
@@ -388,7 +474,7 @@
       });
     });
 
-    // Render Room List
+    // Render Group List
     function renderRoomList(rooms) {
       availableRooms = rooms;
       roomListEl.innerHTML = '';
@@ -408,7 +494,8 @@
           ? `<b>International Talk</b>` 
           : `# ${escapeHtml(room.name)} ${room.hasPassword ? '🔒' : ''}`;
 
-        let deleteBtnHtml = (room.owner === currentUser && room.name !== "International Talk")
+        let canDelete = (room.owner === currentUser || isAdminUser) && room.name !== "International Talk";
+        let deleteBtnHtml = canDelete
           ? `<span class="delete-btn" onclick="deleteRoom(event, '${escapeHtml(room.name)}')">✕</span>`
           : '';
 
@@ -418,7 +505,7 @@
           if (e.target.classList.contains('delete-btn')) return;
           if (room.name === activeRoom) return;
 
-          if (room.hasPassword) {
+          if (room.hasPassword && !isAdminUser) {
             pendingJoinRoom = room.name;
             joinModalTitle.textContent = `Password for "${room.name}"`;
             joinRoomPass.value = '';
@@ -433,7 +520,7 @@
       });
     }
 
-    // Modal Events
+    // Modal Control Events
     openCreateModalBtn.addEventListener('click', () => {
       createRoomName.value = '';
       createRoomPass.value = '';
@@ -441,9 +528,7 @@
       createModal.style.display = 'flex';
     });
 
-    createCancelBtn.addEventListener('click', () => {
-      createModal.style.display = 'none';
-    });
+    createCancelBtn.addEventListener('click', () => createModal.style.display = 'none');
 
     createConfirmBtn.addEventListener('click', () => {
       const roomName = createRoomName.value.trim();
@@ -480,7 +565,93 @@
       }
     });
 
-    // Join Room Action & Render Message History
+    // Admin Dashboard Handlers
+    adminPanelBtn.addEventListener('click', () => {
+      loadAdminData();
+      adminModal.style.display = 'flex';
+    });
+
+    adminCloseBtn.addEventListener('click', () => {
+      adminModal.style.display = 'none';
+    });
+
+    function loadAdminData() {
+      socket.emit('admin get data', (res) => {
+        if (!res.success) return alert(res.message);
+
+        // Active Users List
+        adminActiveUsers.innerHTML = '';
+        res.activeUsers.forEach(user => {
+          if (user === currentUser) return;
+          const div = document.createElement('div');
+          div.classList.add('admin-item');
+          div.innerHTML = `
+            <span>${escapeHtml(user)}</span>
+            <div>
+              <button class="btn-danger" onclick="kickUser('${escapeHtml(user)}')">Kick</button>
+              <button class="btn-danger" onclick="banUser('${escapeHtml(user)}')">Ban</button>
+            </div>
+          `;
+          adminActiveUsers.appendChild(div);
+        });
+
+        // Banned Users List
+        adminBannedUsers.innerHTML = '';
+        res.bannedUsers.forEach(user => {
+          const div = document.createElement('div');
+          div.classList.add('admin-item');
+          div.innerHTML = `
+            <span>${escapeHtml(user)}</span>
+            <button class="btn-primary" style="padding:2px 6px; font-size:11px;" onclick="unbanUser('${escapeHtml(user)}')">Unban</button>
+          `;
+          adminBannedUsers.appendChild(div);
+        });
+
+        // Clear Room Messages List
+        adminRoomList.innerHTML = '';
+        res.rooms.forEach(room => {
+          const div = document.createElement('div');
+          div.classList.add('admin-item');
+          div.innerHTML = `
+            <span>${escapeHtml(room)}</span>
+            <button class="btn-danger" onclick="clearRoom('${escapeHtml(room)}')">Clear Messages</button>
+          `;
+          adminRoomList.appendChild(div);
+        });
+      });
+    }
+
+    window.kickUser = function(user) {
+      socket.emit('admin kick user', user, (res) => {
+        if (res.success) loadAdminData();
+        else alert(res.message);
+      });
+    };
+
+    window.banUser = function(user) {
+      socket.emit('admin ban user', user, (res) => {
+        if (res.success) loadAdminData();
+        else alert(res.message);
+      });
+    };
+
+    window.unbanUser = function(user) {
+      socket.emit('admin unban user', user, (res) => {
+        if (res.success) loadAdminData();
+        else alert(res.message);
+      });
+    };
+
+    window.clearRoom = function(room) {
+      if (confirm(`Clear all saved messages in group "${room}"?`)) {
+        socket.emit('admin clear messages', room, (res) => {
+          if (res.success) alert(`Cleared history for ${room}.`);
+          else alert(res.message);
+        });
+      }
+    };
+
+    // Join Group Action
     function joinGroup(roomName, roomPassword = null, callback = null) {
       socket.emit('join room', { roomName, roomPassword }, (res) => {
         if (res.success) {
@@ -497,7 +668,6 @@
 
           renderRoomList(availableRooms);
 
-          // Render entire room history sent back from server
           if (res.history && Array.isArray(res.history)) {
             res.history.forEach(msg => renderSingleMessage(msg));
           }
@@ -515,26 +685,32 @@
       e.stopPropagation();
       if (confirm(`Are you sure you want to delete group "${roomName}"?`)) {
         socket.emit('delete room', roomName, (res) => {
-          if (!res.success) {
-            alert(res.message);
-          }
+          if (!res.success) alert(res.message);
         });
       }
     };
 
-    // Socket Event Receivers
-    socket.on('room list update', (rooms) => {
-      renderRoomList(rooms);
-    });
+    // Socket Event Handlers
+    socket.on('room list update', (rooms) => renderRoomList(rooms));
 
     socket.on('room deleted', (deletedRoom) => {
       if (activeRoom === deletedRoom) {
-        alert(`The group "${deletedRoom}" was deleted by its owner.`);
+        alert(`The group "${deletedRoom}" was deleted.`);
         joinGroup("International Talk");
       }
     });
 
-    // Message Events
+    socket.on('chat cleared', () => {
+      chatBox.innerHTML = '';
+      renderSingleMessage({ username: 'System', text: 'Chat history was cleared by Admin.', system: true });
+    });
+
+    socket.on('kicked', (reason) => {
+      alert(reason);
+      location.reload();
+    });
+
+    // Chat Message Rendering
     messageForm.addEventListener('submit', (e) => {
       e.preventDefault();
       if (messageInput.value.trim() && activeRoom) {
@@ -543,9 +719,7 @@
       }
     });
 
-    socket.on('chat message', (data) => {
-      renderSingleMessage(data);
-    });
+    socket.on('chat message', (data) => renderSingleMessage(data));
 
     function renderSingleMessage(data) {
       const wrapper = document.createElement('div');
