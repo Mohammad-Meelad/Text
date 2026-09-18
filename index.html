@@ -19,31 +19,47 @@
       height: 100vh;
     }
 
-    /* Sign-In Overlay */
-    #login-overlay {
+    /* Modal Overlay Base */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+    }
+    .modal-box {
       background: white;
-      padding: 30px;
+      padding: 25px;
       border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
       width: 320px;
       display: flex;
       flex-direction: column;
-      gap: 15px;
-      position: absolute;
-      z-index: 10;
+      gap: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     }
-    #login-overlay h2 {
-      margin: 0;
+    .modal-box h3 {
+      margin: 0 0 5px 0;
       color: #075e54;
       text-align: center;
     }
-    #login-overlay input {
+    .modal-box input {
       padding: 10px;
       border: 1px solid #ccc;
       border-radius: 5px;
       font-size: 14px;
     }
-    #login-overlay button {
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 5px;
+    }
+    .btn-primary {
+      flex: 1;
       padding: 10px;
       background-color: #25d366;
       color: white;
@@ -52,10 +68,18 @@
       font-weight: bold;
       cursor: pointer;
     }
-    #login-overlay button:hover {
-      background-color: #1ebc57;
+    .btn-primary:hover { background-color: #1ebc57; }
+    .btn-secondary {
+      flex: 1;
+      padding: 10px;
+      background-color: #888;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      font-weight: bold;
+      cursor: pointer;
     }
-    #login-error {
+    .modal-error {
       color: red;
       font-size: 12px;
       text-align: center;
@@ -75,10 +99,10 @@
       flex-direction: row;
     }
 
-    /* Left Sidebar: Groups */
+    /* Left Sidebar */
     #sidebar {
-      width: 30%;
-      min-width: 250px;
+      width: 32%;
+      min-width: 260px;
       background-color: #f0f2f5;
       border-right: 1px solid #e0e0e0;
       display: flex;
@@ -90,9 +114,9 @@
       padding: 15px;
       font-weight: bold;
     }
-    #create-group-btn {
+    #open-create-modal-btn {
       margin: 10px;
-      padding: 8px;
+      padding: 10px;
       background-color: #128c7e;
       color: white;
       border: none;
@@ -116,22 +140,18 @@
       justify-content: space-between;
       align-items: center;
     }
-    .room-item:hover {
-      background-color: #e9edef;
-    }
-    .room-item.active {
-      background-color: #d9fdd3;
+    .room-item:hover { background-color: #e9edef; }
+    .room-item.active { background-color: #d9fdd3; font-weight: bold; }
+    .delete-btn {
+      color: #ff4d4d;
       font-weight: bold;
-    }
-    .pinned-badge {
-      font-size: 10px;
-      background-color: #25d366;
-      color: white;
       padding: 2px 6px;
-      border-radius: 10px;
+      border-radius: 4px;
+      cursor: pointer;
     }
+    .delete-btn:hover { background-color: #ffe6e6; }
 
-    /* Right Panel: Chat Area */
+    /* Right Panel */
     #chat-panel {
       flex: 1;
       display: flex;
@@ -146,15 +166,8 @@
       flex-direction: column;
       gap: 3px;
     }
-    #header-room-title {
-      font-weight: bold;
-      font-size: 16px;
-      color: #000;
-    }
-    #header-room-desc {
-      font-size: 12px;
-      color: #666;
-    }
+    #header-room-title { font-weight: bold; font-size: 16px; }
+    #header-room-desc { font-size: 12px; color: #666; }
 
     #chat-box {
       flex: 1;
@@ -165,108 +178,73 @@
       gap: 10px;
     }
 
-    /* Messages */
-    .message-wrapper {
-      display: flex;
-      flex-direction: column;
-      max-width: 70%;
-    }
-    .message-wrapper.sent {
-      align-self: flex-end;
-    }
-    .message-wrapper.received {
-      align-self: flex-start;
-    }
-    .message-wrapper.system {
-      align-self: center;
-      max-width: 90%;
-    }
+    /* Message Styling */
+    .message-wrapper { display: flex; flex-direction: column; max-width: 70%; }
+    .message-wrapper.sent { align-self: flex-end; }
+    .message-wrapper.received { align-self: flex-start; }
+    .message-wrapper.system { align-self: center; max-width: 90%; }
+    .sender-name { font-size: 11px; color: #666; margin-bottom: 2px; margin-left: 4px; font-weight: 600; }
+    .message-bubble { padding: 8px 12px; border-radius: 8px; font-size: 14px; line-height: 1.4; word-wrap: break-word; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
+    .sent .message-bubble { background-color: #dcf8c6; border-top-right-radius: 0; }
+    .received .message-bubble { background-color: #ffffff; border-top-left-radius: 0; }
+    .system .message-bubble { background-color: rgba(225, 245, 254, 0.9); color: #555; font-size: 12px; border-radius: 12px; padding: 4px 12px; }
 
-    .sender-name {
-      font-size: 11px;
-      color: #666;
-      margin-bottom: 2px;
-      margin-left: 4px;
-      font-weight: 600;
-    }
-
-    .message-bubble {
-      padding: 8px 12px;
-      border-radius: 8px;
-      font-size: 14px;
-      line-height: 1.4;
-      word-wrap: break-word;
-      box-shadow: 0 1px 1px rgba(0,0,0,0.1);
-    }
-
-    .sent .message-bubble {
-      background-color: #dcf8c6;
-      border-top-right-radius: 0;
-    }
-    
-    .received .message-bubble {
-      background-color: #ffffff;
-      border-top-left-radius: 0;
-    }
-
-    .system .message-bubble {
-      background-color: rgba(225, 245, 254, 0.9);
-      color: #555;
-      font-size: 12px;
-      border-radius: 12px;
-      padding: 4px 12px;
-    }
-
-    /* Message Input */
-    #message-form {
-      display: flex;
-      padding: 10px;
-      background-color: #f0f0f0;
-      gap: 10px;
-    }
-    #message-input {
-      flex: 1;
-      padding: 10px 15px;
-      border: none;
-      border-radius: 20px;
-      font-size: 14px;
-      outline: none;
-    }
-    #send-btn {
-      background-color: #075e54;
-      color: white;
-      border: none;
-      padding: 10px 18px;
-      border-radius: 50%;
-      cursor: pointer;
-      font-weight: bold;
-    }
+    /* Form Input */
+    #message-form { display: flex; padding: 10px; background-color: #f0f0f0; gap: 10px; }
+    #message-input { flex: 1; padding: 10px 15px; border: none; border-radius: 20px; font-size: 14px; outline: none; }
+    #send-btn { background-color: #075e54; color: white; border: none; padding: 10px 18px; border-radius: 50%; cursor: pointer; font-weight: bold; }
   </style>
 </head>
 <body>
 
-  <!-- Sign In Container -->
-  <div id="login-overlay">
-    <h2>Sign In</h2>
-    <input id="login-username" type="text" placeholder="Your Name" required />
-    <input id="login-password" type="password" placeholder="Password" required />
-    <button id="login-btn">Sign In / Enter</button>
-    <div id="login-error"></div>
+  <!-- Modal 1: Sign-In -->
+  <div id="login-modal" class="modal-overlay">
+    <div class="modal-box">
+      <h3>Sign In</h3>
+      <input id="login-username" type="text" placeholder="Your Name" />
+      <input id="login-password" type="password" placeholder="Password" />
+      <div id="login-error" class="modal-error"></div>
+      <button id="login-btn" class="btn-primary">Sign In / Register</button>
+    </div>
   </div>
 
-  <!-- App Interface -->
+  <!-- Modal 2: Create Group Pop-up -->
+  <div id="create-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-box">
+      <h3>Create New Group</h3>
+      <input id="create-room-name" type="text" placeholder="Group Name" />
+      <input id="create-room-pass" type="password" placeholder="Group Password (Optional)" />
+      <div id="create-error" class="modal-error"></div>
+      <div class="modal-actions">
+        <button id="create-confirm-btn" class="btn-primary">Create</button>
+        <button id="create-cancel-btn" class="btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Enter Room Password Pop-up -->
+  <div id="join-pass-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-box">
+      <h3 id="join-modal-title">Enter Group Password</h3>
+      <input id="join-room-pass" type="password" placeholder="Group Password" />
+      <div id="join-pass-error" class="modal-error"></div>
+      <div class="modal-actions">
+        <button id="join-confirm-btn" class="btn-primary">Join</button>
+        <button id="join-cancel-btn" class="btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Application UI -->
   <div id="app-container">
-    
-    <!-- Left Sidebar -->
     <div id="sidebar">
       <div id="sidebar-header">
         <span id="user-display">My Chat Application</span>
       </div>
-      <button id="create-group-btn">+ Create New Group</button>
+      <button id="open-create-modal-btn">+ Create New Group</button>
       <ul id="room-list"></ul>
     </div>
 
-    <!-- Right Active Chat Area -->
     <div id="chat-panel">
       <div id="chat-header">
         <span id="header-room-title">Select a Group</span>
@@ -278,7 +256,6 @@
         <button id="send-btn" type="submit" disabled>➤</button>
       </form>
     </div>
-
   </div>
 
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
@@ -287,17 +264,35 @@
     const socket = io(BACKEND_URL);
 
     let activeRoom = null;
+    let currentUser = null;
+    let pendingJoinRoom = null;
+    let availableRooms = [];
 
-    // UI References
-    const loginOverlay = document.getElementById('login-overlay');
+    // Elements
+    const loginModal = document.getElementById('login-modal');
+    const createModal = document.getElementById('create-modal');
+    const joinPassModal = document.getElementById('join-pass-modal');
     const appContainer = document.getElementById('app-container');
+
     const loginUsername = document.getElementById('login-username');
     const loginPassword = document.getElementById('login-password');
     const loginBtn = document.getElementById('login-btn');
     const loginError = document.getElementById('login-error');
 
+    const createRoomName = document.getElementById('create-room-name');
+    const createRoomPass = document.getElementById('create-room-pass');
+    const createConfirmBtn = document.getElementById('create-confirm-btn');
+    const createCancelBtn = document.getElementById('create-cancel-btn');
+    const createError = document.getElementById('create-error');
+
+    const joinRoomPass = document.getElementById('join-room-pass');
+    const joinConfirmBtn = document.getElementById('join-confirm-btn');
+    const joinCancelBtn = document.getElementById('join-cancel-btn');
+    const joinPassError = document.getElementById('join-pass-error');
+    const joinModalTitle = document.getElementById('join-modal-title');
+
+    const openCreateModalBtn = document.getElementById('open-create-modal-btn');
     const roomListEl = document.getElementById('room-list');
-    const createGroupBtn = document.getElementById('create-group-btn');
     const userDisplay = document.getElementById('user-display');
 
     const headerRoomTitle = document.getElementById('header-room-title');
@@ -314,13 +309,13 @@
 
       socket.emit('login', { username, password }, (res) => {
         if (res.success) {
-          loginOverlay.style.display = 'none';
+          currentUser = username;
+          loginModal.style.display = 'none';
           appContainer.style.display = 'flex';
           userDisplay.textContent = `User: ${username}`;
 
-          renderRoomList(res.rooms);
-          
-          // Automatically join International Talk by default
+          availableRooms = res.rooms;
+          renderRoomList(availableRooms);
           joinGroup("International Talk");
         } else {
           loginError.textContent = res.message;
@@ -329,88 +324,149 @@
       });
     });
 
-    // 2. Render Left Sidebar Groups
+    // 2. Render Room List
     function renderRoomList(rooms) {
+      availableRooms = rooms;
       roomListEl.innerHTML = '';
 
-      // Ensure "International Talk" stays pinned on top
-      const sortedRooms = rooms.sort((a, b) => {
-        if (a === "International Talk") return -1;
-        if (b === "International Talk") return 1;
-        return a.localeCompare(b);
+      // Sort International Talk to top
+      const sorted = [...rooms].sort((a, b) => {
+        if (a.name === "International Talk") return -1;
+        if (b.name === "International Talk") return 1;
+        return a.name.localeCompare(b.name);
       });
 
-      sortedRooms.forEach((roomName) => {
+      sorted.forEach((room) => {
         const li = document.createElement('li');
         li.classList.add('room-item');
-        if (roomName === activeRoom) li.classList.add('active');
+        if (room.name === activeRoom) li.classList.add('active');
 
-        if (roomName === "International Talk") {
-          li.innerHTML = `<span>Global: <b>${roomName}</b></span> <span class="pinned-badge">Public</span>`;
-        } else {
-          li.innerHTML = `<span># ${roomName}</span>`;
-        }
+        let roomLabel = room.name === "International Talk" 
+          ? `<b>International Talk</b>` 
+          : `# ${escapeHtml(room.name)} ${room.hasPassword ? '🔒' : ''}`;
 
-        li.addEventListener('click', () => {
-          if (roomName === activeRoom) return;
-          let pass = null;
-          if (roomName !== "International Talk") {
-            pass = prompt(`Enter password for room "${roomName}" (leave empty if none):`);
+        let deleteBtnHtml = (room.owner === currentUser && room.name !== "International Talk")
+          ? `<span class="delete-btn" onclick="deleteRoom(event, '${escapeHtml(room.name)}')">✕</span>`
+          : '';
+
+        li.innerHTML = `<span>${roomLabel}</span> ${deleteBtnHtml}`;
+
+        li.addEventListener('click', (e) => {
+          if (e.target.classList.contains('delete-btn')) return;
+          if (room.name === activeRoom) return;
+
+          if (room.hasPassword) {
+            pendingJoinRoom = room.name;
+            joinModalTitle.textContent = `Password for "${room.name}"`;
+            joinRoomPass.value = '';
+            joinPassError.style.display = 'none';
+            joinPassModal.style.display = 'flex';
+          } else {
+            joinGroup(room.name);
           }
-          joinGroup(roomName, pass);
         });
 
         roomListEl.appendChild(li);
       });
     }
 
-    // 3. Join Selected Group
-    function joinGroup(roomName, roomPassword = null) {
+    // 3. Create Group Pop-up Handlers
+    openCreateModalBtn.addEventListener('click', () => {
+      createRoomName.value = '';
+      createRoomPass.value = '';
+      createError.style.display = 'none';
+      createModal.style.display = 'flex';
+    });
+
+    createCancelBtn.addEventListener('click', () => {
+      createModal.style.display = 'none';
+    });
+
+    createConfirmBtn.addEventListener('click', () => {
+      const roomName = createRoomName.value.trim();
+      const roomPassword = createRoomPass.value.trim();
+
+      socket.emit('create room', { roomName, roomPassword }, (res) => {
+        if (res.success) {
+          createModal.style.display = 'none';
+          joinGroup(roomName, roomPassword);
+        } else {
+          createError.textContent = res.message;
+          createError.style.display = 'block';
+        }
+      });
+    });
+
+    // 4. Password Join Pop-up Handlers
+    joinCancelBtn.addEventListener('click', () => {
+      joinPassModal.style.display = 'none';
+      pendingJoinRoom = null;
+    });
+
+    joinConfirmBtn.addEventListener('click', () => {
+      const roomPassword = joinRoomPass.value.trim();
+      if (pendingJoinRoom) {
+        joinGroup(pendingJoinRoom, roomPassword, (success, msg) => {
+          if (success) {
+            joinPassModal.style.display = 'none';
+            pendingJoinRoom = null;
+          } else {
+            joinPassError.textContent = msg;
+            joinPassError.style.display = 'block';
+          }
+        });
+      }
+    });
+
+    // 5. Join Group Logic
+    function joinGroup(roomName, roomPassword = null, callback = null) {
       socket.emit('join room', { roomName, roomPassword }, (res) => {
         if (res.success) {
           activeRoom = roomName;
-          chatBox.innerHTML = ''; // Clear prior chat view
+          chatBox.innerHTML = '';
 
           headerRoomTitle.textContent = roomName;
           headerRoomDesc.textContent = (roomName === "International Talk") 
             ? "Global public room for everyone worldwide." 
-            : `Private group: ${roomName}`;
+            : `Group Chat: ${roomName}`;
 
           messageInput.disabled = false;
           sendBtn.disabled = false;
 
-          // Re-render rooms list to update active highlight state
-          const allRooms = Array.from(document.querySelectorAll('.room-item')).map(
-            el => el.textContent.replace('Global: ', '').replace('Public', '').replace('# ', '').trim()
-          );
-          renderRoomList(allRooms);
+          renderRoomList(availableRooms);
+          if (callback) callback(true);
         } else {
-          alert(res.message);
+          if (callback) callback(false, res.message);
+          else alert(res.message);
         }
       });
     }
 
-    // 4. Create New Group
-    createGroupBtn.addEventListener('click', () => {
-      const roomName = prompt("Enter new Group Name:");
-      if (!roomName) return;
-      const roomPassword = prompt("Set a password for this group (optional, leave blank for none):");
+    // 6. Delete Room Logic
+    window.deleteRoom = function(e, roomName) {
+      e.stopPropagation();
+      if (confirm(`Are you sure you want to delete group "${roomName}"?`)) {
+        socket.emit('delete room', roomName, (res) => {
+          if (!res.success) {
+            alert(res.message);
+          }
+        });
+      }
+    };
 
-      socket.emit('create room', { roomName, roomPassword }, (res) => {
-        if (res.success) {
-          joinGroup(roomName, roomPassword);
-        } else {
-          alert(res.message);
-        }
-      });
-    });
-
-    // 5. Dynamic Group List Updates
+    // Socket Event Receivers
     socket.on('room list update', (rooms) => {
       renderRoomList(rooms);
     });
 
-    // 6. Send Chat Message
+    socket.on('room deleted', (deletedRoom) => {
+      if (activeRoom === deletedRoom) {
+        alert(`The group "${deletedRoom}" was deleted by its owner.`);
+        joinGroup("International Talk");
+      }
+    });
+
+    // Chat Messaging
     messageForm.addEventListener('submit', (e) => {
       e.preventDefault();
       if (messageInput.value.trim() && activeRoom) {
@@ -419,7 +475,6 @@
       }
     });
 
-    // 7. Receive and Render Chat Messages
     socket.on('chat message', (data) => {
       const wrapper = document.createElement('div');
       wrapper.classList.add('message-wrapper');
