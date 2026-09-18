@@ -12,55 +12,107 @@ const io = new Server(server, {
   }
 });
 
-// Store room passwords in memory: { roomName: password }
-const roomPasswords = {};
+// Store registered users: { username: password }
+const users = {};
+
+// Store rooms and passwords: { roomName: password }
+// Pre-populate global "International Talk" room (no password required)
+const rooms = {
+  "International Talk": null
+};
 
 app.get('/', (req, res) => {
-  res.send('Socket.IO WhatsApp-Style Backend is Running');
+  res.send('Socket.IO Multigroup Backend is Running');
 });
 
 io.on('connection', (socket) => {
-  console.log('A user connected:', socket.id);
+  console.log('User connected:', socket.id);
 
-  // Handle joining/creating a room
-  socket.on('join room', ({ username, room, password }, callback) => {
-    // If room exists and has a password, verify it
-    if (roomPasswords[room]) {
-      if (roomPasswords[room] !== password) {
-        return callback({ success: false, message: 'Incorrect password for this room.' });
-      }
-    } else if (password) {
-      // If room does not exist, set the password for this new room
-      roomPasswords[room] = password;
+  // 1. Sign In / Register User
+  socket.on('login', ({ username, password }, callback) => {
+    if (!username || !password) {
+      return callback({ success: false, message: 'Name and Password are required.' });
     }
 
-    // Leave any previous rooms except socket's own room
-    Array.from(socket.rooms).forEach((r) => {
-      if (r !== socket.id) socket.leave(r);
-    });
+    if (users[username]) {
+      if (users[username] !== password) {
+        return callback({ success: false, message: 'Incorrect password for this user.' });
+      }
+    } else {
+      // Register new user on first sign-in
+      users[username] = password;
+    }
 
-    socket.join(room);
     socket.data.username = username;
-    socket.data.room = room;
+    
+    // Return success and current list of available groups
+    callback({ 
+      success: true, 
+      rooms: Object.keys(rooms) 
+    });
+  });
+
+  // 2. Create New Group Room
+  socket.on('create room', ({ roomName, roomPassword }, callback) => {
+    if (!roomName) {
+      return callback({ success: false, message: 'Group Name is required.' });
+    }
+
+    if (rooms[roomName] !== undefined) {
+      return callback({ success: false, message: 'Group already exists.' });
+    }
+
+    rooms[roomName] = roomPassword || null;
+
+    // Notify all online clients that a new group was created
+    io.emit('room list update', Object.keys(rooms));
+
+    callback({ success: true });
+  });
+
+  // 3. Switch / Join Selected Group
+  socket.on('join room', ({ roomName, roomPassword }, callback) => {
+    const username = socket.data.username;
+    if (!username) {
+      return callback({ success: false, message: 'You must be signed in.' });
+    }
+
+    // Verify room password if room requires one
+    if (rooms[roomName] && rooms[roomName] !== roomPassword) {
+      return callback({ success: false, message: 'Incorrect room password.' });
+    }
+
+    // Leave any current room
+    if (socket.data.currentRoom) {
+      socket.leave(socket.data.currentRoom);
+      io.to(socket.data.currentRoom).emit('chat message', {
+        username: 'System',
+        text: `${username} left the group.`,
+        system: true
+      });
+    }
+
+    // Join new room
+    socket.join(roomName);
+    socket.data.currentRoom = roomName;
 
     callback({ success: true });
 
-    // System notification when a user joins
-    io.to(room).emit('chat message', {
+    // Announce user joined room
+    io.to(roomName).emit('chat message', {
       username: 'System',
-      text: `${username} joined the group.`,
+      text: `${username} joined ${roomName}.`,
       system: true
     });
   });
 
-  // Handle incoming chat messages
+  // 4. Handle Chat Messages
   socket.on('chat message', (msgText) => {
-    const room = socket.data.room;
+    const room = socket.data.currentRoom;
     const username = socket.data.username;
 
     if (!room || !username) return;
 
-    // Broadcast message to everyone in the room
     io.to(room).emit('chat message', {
       username: username,
       text: msgText,
@@ -70,13 +122,13 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    const room = socket.data.room;
+    const room = socket.data.currentRoom;
     const username = socket.data.username;
 
     if (room && username) {
       io.to(room).emit('chat message', {
         username: 'System',
-        text: `${username} left the group.`,
+        text: `${username} disconnected.`,
         system: true
       });
     }
