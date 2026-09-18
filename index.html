@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WhatsApp Web Style Chat</title>
+  <title>Global Web Chat</title>
   <style>
     * {
       box-sizing: border-box;
@@ -18,30 +18,32 @@
       align-items: center;
       height: 100vh;
     }
-    
-    /* Login / Join Room Screen */
-    #login-container {
+
+    /* Sign-In Overlay */
+    #login-overlay {
       background: white;
       padding: 30px;
       border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
       width: 320px;
       display: flex;
       flex-direction: column;
       gap: 15px;
+      position: absolute;
+      z-index: 10;
     }
-    #login-container h2 {
-      margin: 0 0 10px 0;
+    #login-overlay h2 {
+      margin: 0;
       color: #075e54;
       text-align: center;
     }
-    #login-container input {
+    #login-overlay input {
       padding: 10px;
       border: 1px solid #ccc;
       border-radius: 5px;
       font-size: 14px;
     }
-    #login-container button {
+    #login-overlay button {
       padding: 10px;
       background-color: #25d366;
       color: white;
@@ -49,39 +51,111 @@
       border-radius: 5px;
       font-weight: bold;
       cursor: pointer;
-      font-size: 15px;
     }
-    #login-container button:hover {
+    #login-overlay button:hover {
       background-color: #1ebc57;
     }
-    #error-msg {
+    #login-error {
       color: red;
       font-size: 12px;
       text-align: center;
       display: none;
     }
 
-    /* WhatsApp Chat Interface */
-    #chat-container {
+    /* Application Layout */
+    #app-container {
       display: none;
-      flex-direction: column;
-      width: 100%;
-      max-width: 600px;
+      width: 95vw;
+      max-width: 1000px;
       height: 90vh;
-      background-color: #e5ddd5;
+      background: #ffffff;
       border-radius: 8px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.15);
       overflow: hidden;
+      flex-direction: row;
     }
-    #chat-header {
+
+    /* Left Sidebar: Groups */
+    #sidebar {
+      width: 30%;
+      min-width: 250px;
+      background-color: #f0f2f5;
+      border-right: 1px solid #e0e0e0;
+      display: flex;
+      flex-direction: column;
+    }
+    #sidebar-header {
       background-color: #075e54;
       color: white;
       padding: 15px;
       font-weight: bold;
+    }
+    #create-group-btn {
+      margin: 10px;
+      padding: 8px;
+      background-color: #128c7e;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    #room-list {
+      flex: 1;
+      overflow-y: auto;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .room-item {
+      padding: 12px 15px;
+      border-bottom: 1px solid #e0e0e0;
+      cursor: pointer;
+      font-size: 14px;
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
+    .room-item:hover {
+      background-color: #e9edef;
+    }
+    .room-item.active {
+      background-color: #d9fdd3;
+      font-weight: bold;
+    }
+    .pinned-badge {
+      font-size: 10px;
+      background-color: #25d366;
+      color: white;
+      padding: 2px 6px;
+      border-radius: 10px;
+    }
+
+    /* Right Panel: Chat Area */
+    #chat-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background-color: #e5ddd5;
+    }
+    #chat-header {
+      background-color: #f0f2f5;
+      padding: 15px;
+      border-bottom: 1px solid #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    #header-room-title {
+      font-weight: bold;
+      font-size: 16px;
+      color: #000;
+    }
+    #header-room-desc {
+      font-size: 12px;
+      color: #666;
+    }
+
     #chat-box {
       flex: 1;
       padding: 15px;
@@ -91,7 +165,7 @@
       gap: 10px;
     }
 
-    /* Message Bubbles */
+    /* Messages */
     .message-wrapper {
       display: flex;
       flex-direction: column;
@@ -124,14 +198,12 @@
       word-wrap: break-word;
       box-shadow: 0 1px 1px rgba(0,0,0,0.1);
     }
-    
-    /* Sent messages (Blue/Green WhatsApp right align) */
+
     .sent .message-bubble {
       background-color: #dcf8c6;
       border-top-right-radius: 0;
     }
     
-    /* Received messages (Grey left align) */
     .received .message-bubble {
       background-color: #ffffff;
       border-top-left-radius: 0;
@@ -145,14 +217,14 @@
       padding: 4px 12px;
     }
 
-    /* Input Form */
-    #form {
+    /* Message Input */
+    #message-form {
       display: flex;
       padding: 10px;
       background-color: #f0f0f0;
       gap: 10px;
     }
-    #input {
+    #message-input {
       flex: 1;
       padding: 10px 15px;
       border: none;
@@ -173,86 +245,181 @@
 </head>
 <body>
 
-  <!-- Sign In & Group Setup Screen -->
-  <div id="login-container">
-    <h2>Join or Create Group</h2>
-    <input id="username" type="text" placeholder="Your Name" required />
-    <input id="room" type="text" placeholder="Group Name" required />
-    <input id="password" type="password" placeholder="Room Password (Optional)" />
-    <button id="join-btn">Join Chat</button>
-    <div id="error-msg"></div>
+  <!-- Sign In Container -->
+  <div id="login-overlay">
+    <h2>Sign In</h2>
+    <input id="login-username" type="text" placeholder="Your Name" required />
+    <input id="login-password" type="password" placeholder="Password" required />
+    <button id="login-btn">Sign In / Enter</button>
+    <div id="login-error"></div>
   </div>
 
-  <!-- Main Chat Window -->
-  <div id="chat-container">
-    <div id="chat-header">
-      <span id="header-room-name">Group Name</span>
-      <span id="header-user-name" style="font-size: 12px; opacity: 0.8;"></span>
+  <!-- App Interface -->
+  <div id="app-container">
+    
+    <!-- Left Sidebar -->
+    <div id="sidebar">
+      <div id="sidebar-header">
+        <span id="user-display">My Chat Application</span>
+      </div>
+      <button id="create-group-btn">+ Create New Group</button>
+      <ul id="room-list"></ul>
     </div>
-    <div id="chat-box"></div>
-    <form id="form" action="">
-      <input id="input" autocomplete="off" placeholder="Type a message..." />
-      <button id="send-btn" type="submit">➤</button>
-    </form>
+
+    <!-- Right Active Chat Area -->
+    <div id="chat-panel">
+      <div id="chat-header">
+        <span id="header-room-title">Select a Group</span>
+        <span id="header-room-desc">Join a group from the left sidebar to start talking.</span>
+      </div>
+      <div id="chat-box"></div>
+      <form id="message-form" action="">
+        <input id="message-input" autocomplete="off" placeholder="Type a message..." disabled />
+        <button id="send-btn" type="submit" disabled>➤</button>
+      </form>
+    </div>
+
   </div>
 
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <script>
-    // REPLACE THIS with your Render URL once deployed
     const BACKEND_URL = "https://text-p3e7.onrender.com";
-
     const socket = io(BACKEND_URL);
 
-    const loginContainer = document.getElementById('login-container');
-    const chatContainer = document.getElementById('chat-container');
-    const errorMsg = document.getElementById('error-msg');
-    
-    const usernameInput = document.getElementById('username');
-    const roomInput = document.getElementById('room');
-    const passwordInput = document.getElementById('password');
-    const joinBtn = document.getElementById('join-btn');
+    let activeRoom = null;
 
-    const form = document.getElementById('form');
-    const input = document.getElementById('input');
+    // UI References
+    const loginOverlay = document.getElementById('login-overlay');
+    const appContainer = document.getElementById('app-container');
+    const loginUsername = document.getElementById('login-username');
+    const loginPassword = document.getElementById('login-password');
+    const loginBtn = document.getElementById('login-btn');
+    const loginError = document.getElementById('login-error');
+
+    const roomListEl = document.getElementById('room-list');
+    const createGroupBtn = document.getElementById('create-group-btn');
+    const userDisplay = document.getElementById('user-display');
+
+    const headerRoomTitle = document.getElementById('header-room-title');
+    const headerRoomDesc = document.getElementById('header-room-desc');
     const chatBox = document.getElementById('chat-box');
-    const headerRoomName = document.getElementById('header-room-name');
-    const headerUserName = document.getElementById('header-user-name');
+    const messageForm = document.getElementById('message-form');
+    const messageInput = document.getElementById('message-input');
+    const sendBtn = document.getElementById('send-btn');
 
-    // Join Group Action
-    joinBtn.addEventListener('click', () => {
-      const username = usernameInput.value.trim();
-      const room = roomInput.value.trim();
-      const password = passwordInput.value.trim();
+    // 1. Sign In
+    loginBtn.addEventListener('click', () => {
+      const username = loginUsername.value.trim();
+      const password = loginPassword.value.trim();
 
-      if (!username || !room) {
-        errorMsg.textContent = "Name and Group Name are required.";
-        errorMsg.style.display = "block";
-        return;
-      }
+      socket.emit('login', { username, password }, (res) => {
+        if (res.success) {
+          loginOverlay.style.display = 'none';
+          appContainer.style.display = 'flex';
+          userDisplay.textContent = `User: ${username}`;
 
-      socket.emit('join room', { username, room, password }, (response) => {
-        if (response.success) {
-          loginContainer.style.display = 'none';
-          chatContainer.style.display = 'flex';
-          headerRoomName.textContent = room;
-          headerUserName.textContent = `Signed in as: ${username}`;
+          renderRoomList(res.rooms);
+          
+          // Automatically join International Talk by default
+          joinGroup("International Talk");
         } else {
-          errorMsg.textContent = response.message;
-          errorMsg.style.display = "block";
+          loginError.textContent = res.message;
+          loginError.style.display = 'block';
         }
       });
     });
 
-    // Send Message
-    form.addEventListener('submit', (e) => {
+    // 2. Render Left Sidebar Groups
+    function renderRoomList(rooms) {
+      roomListEl.innerHTML = '';
+
+      // Ensure "International Talk" stays pinned on top
+      const sortedRooms = rooms.sort((a, b) => {
+        if (a === "International Talk") return -1;
+        if (b === "International Talk") return 1;
+        return a.localeCompare(b);
+      });
+
+      sortedRooms.forEach((roomName) => {
+        const li = document.createElement('li');
+        li.classList.add('room-item');
+        if (roomName === activeRoom) li.classList.add('active');
+
+        if (roomName === "International Talk") {
+          li.innerHTML = `<span>Global: <b>${roomName}</b></span> <span class="pinned-badge">Public</span>`;
+        } else {
+          li.innerHTML = `<span># ${roomName}</span>`;
+        }
+
+        li.addEventListener('click', () => {
+          if (roomName === activeRoom) return;
+          let pass = null;
+          if (roomName !== "International Talk") {
+            pass = prompt(`Enter password for room "${roomName}" (leave empty if none):`);
+          }
+          joinGroup(roomName, pass);
+        });
+
+        roomListEl.appendChild(li);
+      });
+    }
+
+    // 3. Join Selected Group
+    function joinGroup(roomName, roomPassword = null) {
+      socket.emit('join room', { roomName, roomPassword }, (res) => {
+        if (res.success) {
+          activeRoom = roomName;
+          chatBox.innerHTML = ''; // Clear prior chat view
+
+          headerRoomTitle.textContent = roomName;
+          headerRoomDesc.textContent = (roomName === "International Talk") 
+            ? "Global public room for everyone worldwide." 
+            : `Private group: ${roomName}`;
+
+          messageInput.disabled = false;
+          sendBtn.disabled = false;
+
+          // Re-render rooms list to update active highlight state
+          const allRooms = Array.from(document.querySelectorAll('.room-item')).map(
+            el => el.textContent.replace('Global: ', '').replace('Public', '').replace('# ', '').trim()
+          );
+          renderRoomList(allRooms);
+        } else {
+          alert(res.message);
+        }
+      });
+    }
+
+    // 4. Create New Group
+    createGroupBtn.addEventListener('click', () => {
+      const roomName = prompt("Enter new Group Name:");
+      if (!roomName) return;
+      const roomPassword = prompt("Set a password for this group (optional, leave blank for none):");
+
+      socket.emit('create room', { roomName, roomPassword }, (res) => {
+        if (res.success) {
+          joinGroup(roomName, roomPassword);
+        } else {
+          alert(res.message);
+        }
+      });
+    });
+
+    // 5. Dynamic Group List Updates
+    socket.on('room list update', (rooms) => {
+      renderRoomList(rooms);
+    });
+
+    // 6. Send Chat Message
+    messageForm.addEventListener('submit', (e) => {
       e.preventDefault();
-      if (input.value.trim()) {
-        socket.emit('chat message', input.value);
-        input.value = '';
+      if (messageInput.value.trim() && activeRoom) {
+        socket.emit('chat message', messageInput.value);
+        messageInput.value = '';
       }
     });
 
-    // Receive Message
+    // 7. Receive and Render Chat Messages
     socket.on('chat message', (data) => {
       const wrapper = document.createElement('div');
       wrapper.classList.add('message-wrapper');
