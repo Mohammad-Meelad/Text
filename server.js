@@ -13,7 +13,7 @@ const io = new Server(server, {
   }
 });
 
-// Self-ping every 10 minutes to help keep Render instance awake
+// Keep Render free instance awake with self-ping
 setInterval(() => {
   https.get('https://text-p3e7.onrender.com/', (res) => {
     console.log('Self-ping sent to keep server alive.');
@@ -28,6 +28,11 @@ const users = {};
 // Group rooms: { roomName: { password: "...", owner: "username" } }
 const rooms = {
   "International Talk": { password: null, owner: "System" }
+};
+
+// In-memory message history store: { roomName: [ { username, text, senderId, system, timestamp } ] }
+const messageHistory = {
+  "International Talk": []
 };
 
 app.get('/', (req, res) => {
@@ -79,6 +84,9 @@ io.on('connection', (socket) => {
       owner: username
     };
 
+    // Initialize history array for the new room
+    messageHistory[roomName] = [];
+
     broadcastRoomList();
     callback({ success: true });
   });
@@ -99,25 +107,38 @@ io.on('connection', (socket) => {
       return callback({ success: false, message: 'Incorrect group password.' });
     }
 
+    // Leave Current Room
     if (socket.data.currentRoom) {
-      socket.leave(socket.data.currentRoom);
-      io.to(socket.data.currentRoom).emit('chat message', {
+      const oldRoom = socket.data.currentRoom;
+      socket.leave(oldRoom);
+
+      const leaveMsg = {
         username: 'System',
-        text: `${username} left the group.`,
+        text: `${username} has left ${oldRoom}.`,
         system: true
-      });
+      };
+      
+      saveMessage(oldRoom, leaveMsg);
+      io.to(oldRoom).emit('chat message', leaveMsg);
     }
 
+    // Join New Room
     socket.join(roomName);
     socket.data.currentRoom = roomName;
 
-    callback({ success: true });
+    // Send saved chat history to the joining user only
+    const history = messageHistory[roomName] || [];
+    callback({ success: true, history: history });
 
-    io.to(roomName).emit('chat message', {
+    // Broadcast join notification to room
+    const joinMsg = {
       username: 'System',
       text: `${username} joined ${roomName}.`,
       system: true
-    });
+    };
+
+    saveMessage(roomName, joinMsg);
+    io.to(roomName).emit('chat message', joinMsg);
   });
 
   // Delete Group
@@ -138,6 +159,7 @@ io.on('connection', (socket) => {
     }
 
     delete rooms[roomName];
+    delete messageHistory[roomName];
 
     io.to(roomName).emit('room deleted', roomName);
     broadcastRoomList();
@@ -151,12 +173,15 @@ io.on('connection', (socket) => {
 
     if (!room || !username) return;
 
-    io.to(room).emit('chat message', {
+    const msgData = {
       username: username,
       text: msgText,
       senderId: socket.id,
       system: false
-    });
+    };
+
+    saveMessage(room, msgData);
+    io.to(room).emit('chat message', msgData);
   });
 
   socket.on('disconnect', () => {
@@ -164,13 +189,27 @@ io.on('connection', (socket) => {
     const username = socket.data.username;
 
     if (room && username) {
-      io.to(room).emit('chat message', {
+      const disconnectMsg = {
         username: 'System',
-        text: `${username} disconnected.`,
+        text: `${username} has left ${room}.`,
         system: true
-      });
+      };
+
+      saveMessage(room, disconnectMsg);
+      io.to(room).emit('chat message', disconnectMsg);
     }
   });
+
+  function saveMessage(roomName, msgData) {
+    if (!messageHistory[roomName]) {
+      messageHistory[roomName] = [];
+    }
+    // Limit stored messages per room to last 200 messages to manage memory
+    messageHistory[roomName].push(msgData);
+    if (messageHistory[roomName].length > 200) {
+      messageHistory[roomName].shift();
+    }
+  }
 
   function broadcastRoomList() {
     const roomList = Object.keys(rooms).map(name => ({
