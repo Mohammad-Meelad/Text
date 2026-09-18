@@ -20,7 +20,8 @@
     .modal-box input { padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; outline: none; }
     .modal-actions { display: flex; gap: 10px; margin-top: 5px; }
     .btn-primary { flex: 1; padding: 10px; background-color: #25d366; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
-    .btn-primary:hover { background-color: #1ebc57; }
+    .btn-primary:disabled { background-color: #a8e6cf; cursor: not-allowed; }
+    .btn-primary:hover:not(:disabled) { background-color: #1ebc57; }
     .btn-secondary { flex: 1; padding: 10px; background-color: #888; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
     .modal-error { color: red; font-size: 12px; text-align: center; display: none; }
     .modal-success { color: green; font-size: 12px; text-align: center; display: none; }
@@ -35,12 +36,10 @@
     #room-list { flex: 1; overflow-y: auto; list-style: none; margin: 0; padding: 0; }
     .room-item { padding: 12px 15px; border-bottom: 1px solid #e0e0e0; cursor: pointer; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
     .room-item.active { background-color: #d9fdd3; font-weight: bold; }
-    .delete-btn { color: #ff4d4d; font-weight: bold; padding: 2px 6px; cursor: pointer; }
 
     #chat-panel { flex: 1; display: flex; flex-direction: column; background-color: #e5ddd5; }
     #chat-header { background-color: #f0f2f5; padding: 15px; border-bottom: 1px solid #e0e0e0; display: flex; flex-direction: column; gap: 3px; }
     #header-room-title { font-weight: bold; font-size: 16px; }
-    #header-room-desc { font-size: 12px; color: #666; }
     #chat-box { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
 
     .message-wrapper { display: flex; flex-direction: column; max-width: 70%; }
@@ -66,39 +65,40 @@
     <div style="font-weight: bold; font-size: 18px;">Connecting to Server...</div>
   </div>
 
-  <!-- Sign In & Registration Modals -->
+  <!-- Sign In & Registration Modals Wrapped in <form> Tags to Resolve DOM Console Warnings -->
   <div id="auth-modal" class="modal-overlay" style="display: none;">
+    
     <!-- Sign In View -->
-    <div id="login-box" class="modal-box">
+    <form id="login-box" class="modal-box" onsubmit="return false;">
       <h3>Sign In</h3>
-      <input id="login-username" type="text" placeholder="Your Name" />
-      <input id="login-password" type="password" placeholder="Password" />
+      <input id="login-username" type="text" placeholder="Your Name" autocomplete="username" />
+      <input id="login-password" type="password" placeholder="Password" autocomplete="current-password" />
       <div id="login-error" class="modal-error"></div>
-      <button id="login-btn" class="btn-primary">Sign In</button>
+      <button id="login-btn" type="submit" class="btn-primary">Sign In</button>
       <div class="toggle-auth" id="show-register-btn">Don't have an account? Register with Email</div>
-    </div>
+    </form>
 
     <!-- Registration View -->
-    <div id="register-box" class="modal-box" style="display: none;">
+    <form id="register-box" class="modal-box" style="display: none;" onsubmit="return false;">
       <h3>Create Account</h3>
-      <input id="reg-username" type="text" placeholder="Your Name" />
-      <input id="reg-email" type="email" placeholder="Your Email Address" />
-      <input id="reg-password" type="password" placeholder="Password" />
+      <input id="reg-username" type="text" placeholder="Your Name" autocomplete="username" />
+      <input id="reg-email" type="email" placeholder="Your Email Address" autocomplete="email" />
+      <input id="reg-password" type="password" placeholder="Password" autocomplete="new-password" />
       <div id="reg-error" class="modal-error"></div>
       <div id="reg-success" class="modal-success"></div>
-      <button id="send-code-btn" class="btn-primary">Send Verification Code</button>
+      <button id="send-code-btn" type="button" class="btn-primary">Send Verification Code</button>
 
-      <!-- Code Step -->
-      <div id="code-step" style="display: none; flex-direction: column; gap: 8px; margin-top: 10px;">
+      <!-- Code Verification Step -->
+      <div id="code-step" style="display: none; flex-direction: column; gap: 8px; margin-top: 5px;">
         <input id="reg-code" type="text" placeholder="6-Digit Verification Code" />
-        <button id="verify-code-btn" class="btn-primary">Verify Code & Complete</button>
+        <button id="verify-code-btn" type="button" class="btn-primary">Verify Code & Complete</button>
       </div>
 
       <div class="toggle-auth" id="show-login-btn">Already have an account? Sign In</div>
-    </div>
+    </form>
   </div>
 
-  <!-- Main App -->
+  <!-- Main App Container -->
   <div id="app-container">
     <div id="sidebar">
       <div id="sidebar-header">
@@ -112,7 +112,6 @@
     <div id="chat-panel">
       <div id="chat-header">
         <span id="header-room-title">Select a Group</span>
-        <span id="header-room-desc">Join a group from the left sidebar to start talking.</span>
       </div>
       <div id="chat-box"></div>
       <form id="message-form" action="">
@@ -129,8 +128,9 @@
 
     let activeRoom = null;
     let currentUser = null;
+    let cooldownTimer = null;
 
-    // UI Elements
+    // UI References
     const loadingScreen = document.getElementById('loading-screen');
     const authModal = document.getElementById('auth-modal');
     const loginBox = document.getElementById('login-box');
@@ -159,7 +159,6 @@
     const userDisplay = document.getElementById('user-display');
 
     const headerRoomTitle = document.getElementById('header-room-title');
-    const headerRoomDesc = document.getElementById('header-room-desc');
     const chatBox = document.getElementById('chat-box');
     const messageForm = document.getElementById('message-form');
     const messageInput = document.getElementById('message-input');
@@ -181,7 +180,7 @@
       loginBox.style.display = 'flex';
     });
 
-    // Request Email Code
+    // Request Email Code with 30s Cooldown Timer
     sendCodeBtn.addEventListener('click', () => {
       const username = regUsername.value.trim();
       const email = regEmail.value.trim();
@@ -195,12 +194,31 @@
           regSuccess.textContent = res.message;
           regSuccess.style.display = 'block';
           codeStep.style.display = 'flex';
+          startCooldown(30);
         } else {
           regError.textContent = res.message;
           regError.style.display = 'block';
         }
       });
     });
+
+    function startCooldown(seconds) {
+      let remaining = seconds;
+      sendCodeBtn.disabled = true;
+      sendCodeBtn.textContent = `Resend Code in ${remaining}s`;
+
+      clearInterval(cooldownTimer);
+      cooldownTimer = setInterval(() => {
+        remaining--;
+        if (remaining <= 0) {
+          clearInterval(cooldownTimer);
+          sendCodeBtn.disabled = false;
+          sendCodeBtn.textContent = "Send Verification Code";
+        } else {
+          sendCodeBtn.textContent = `Resend Code in ${remaining}s`;
+        }
+      }, 1000);
+    }
 
     // Verify Code
     verifyCodeBtn.addEventListener('click', () => {
@@ -221,7 +239,7 @@
     });
 
     // Login Action
-    loginBtn.addEventListener('click', () => {
+    loginBox.addEventListener('submit', () => {
       const username = loginUsername.value.trim();
       const password = loginPassword.value.trim();
 
