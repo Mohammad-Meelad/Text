@@ -15,20 +15,18 @@ const io = new Server(server, {
 // Store registered users: { username: password }
 const users = {};
 
-// Store rooms and passwords: { roomName: password }
-// Pre-populate global "International Talk" room (no password required)
+// Store rooms data: { roomName: { password: "...", owner: "username" } }
 const rooms = {
-  "International Talk": null
+  "International Talk": { password: null, owner: "System" }
 };
 
 app.get('/', (req, res) => {
-  res.send('Socket.IO Multigroup Backend is Running');
+  res.send('Socket.IO Chat Backend Running');
 });
 
 io.on('connection', (socket) => {
-  console.log('User connected:', socket.id);
 
-  // 1. Sign In / Register User
+  // Sign In / Register
   socket.on('login', ({ username, password }, callback) => {
     if (!username || !password) {
       return callback({ success: false, message: 'Name and Password are required.' });
@@ -36,53 +34,64 @@ io.on('connection', (socket) => {
 
     if (users[username]) {
       if (users[username] !== password) {
-        return callback({ success: false, message: 'Incorrect password for this user.' });
+        return callback({ success: false, message: 'Incorrect user password.' });
       }
     } else {
-      // Register new user on first sign-in
       users[username] = password;
     }
 
     socket.data.username = username;
     
-    // Return success and current list of available groups
-    callback({ 
-      success: true, 
-      rooms: Object.keys(rooms) 
-    });
+    // Send back current rooms and public properties (excluding passwords)
+    const roomList = Object.keys(rooms).map(name => ({
+      name: name,
+      hasPassword: !!rooms[name].password,
+      owner: rooms[name].owner
+    }));
+
+    callback({ success: true, rooms: roomList });
   });
 
-  // 2. Create New Group Room
+  // Create New Group
   socket.on('create room', ({ roomName, roomPassword }, callback) => {
+    const username = socket.data.username;
+    if (!username) {
+      return callback({ success: false, message: 'Must be logged in.' });
+    }
     if (!roomName) {
       return callback({ success: false, message: 'Group Name is required.' });
     }
-
-    if (rooms[roomName] !== undefined) {
-      return callback({ success: false, message: 'Group already exists.' });
+    if (rooms[roomName]) {
+      return callback({ success: false, message: 'Group name already exists.' });
     }
 
-    rooms[roomName] = roomPassword || null;
+    rooms[roomName] = {
+      password: roomPassword || null,
+      owner: username
+    };
 
-    // Notify all online clients that a new group was created
-    io.emit('room list update', Object.keys(rooms));
-
+    broadcastRoomList();
     callback({ success: true });
   });
 
-  // 3. Switch / Join Selected Group
+  // Join Selected Group
   socket.on('join room', ({ roomName, roomPassword }, callback) => {
     const username = socket.data.username;
     if (!username) {
       return callback({ success: false, message: 'You must be signed in.' });
     }
 
-    // Verify room password if room requires one
-    if (rooms[roomName] && rooms[roomName] !== roomPassword) {
-      return callback({ success: false, message: 'Incorrect room password.' });
+    const room = rooms[roomName];
+    if (!room) {
+      return callback({ success: false, message: 'Group does not exist.' });
     }
 
-    // Leave any current room
+    // Password Check
+    if (room.password && room.password !== roomPassword) {
+      return callback({ success: false, message: 'Incorrect group password.' });
+    }
+
+    // Leave Current Room
     if (socket.data.currentRoom) {
       socket.leave(socket.data.currentRoom);
       io.to(socket.data.currentRoom).emit('chat message', {
@@ -92,13 +101,12 @@ io.on('connection', (socket) => {
       });
     }
 
-    // Join new room
+    // Join New Room
     socket.join(roomName);
     socket.data.currentRoom = roomName;
 
     callback({ success: true });
 
-    // Announce user joined room
     io.to(roomName).emit('chat message', {
       username: 'System',
       text: `${username} joined ${roomName}.`,
@@ -106,7 +114,33 @@ io.on('connection', (socket) => {
     });
   });
 
-  // 4. Handle Chat Messages
+  // Delete Group
+  socket.on('delete room', (roomName, callback) => {
+    const username = socket.data.username;
+    const room = rooms[roomName];
+
+    if (!room) {
+      return callback({ success: false, message: 'Group does not exist.' });
+    }
+
+    if (roomName === "International Talk") {
+      return callback({ success: false, message: 'International Talk cannot be deleted.' });
+    }
+
+    if (room.owner !== username) {
+      return callback({ success: false, message: 'Only the group owner can delete this group.' });
+    }
+
+    delete rooms[roomName];
+
+    // Notify clients inside the room that it was deleted
+    io.to(roomName).emit('room deleted', roomName);
+
+    broadcastRoomList();
+    callback({ success: true });
+  });
+
+  // Chat Message Handling
   socket.on('chat message', (msgText) => {
     const room = socket.data.currentRoom;
     const username = socket.data.username;
@@ -132,8 +166,16 @@ io.on('connection', (socket) => {
         system: true
       });
     }
-    console.log('User disconnected:', socket.id);
   });
+
+  function broadcastRoomList() {
+    const roomList = Object.keys(rooms).map(name => ({
+      name: name,
+      hasPassword: !!rooms[name].password,
+      owner: rooms[name].owner
+    }));
+    io.emit('room list update', roomList);
+  }
 });
 
 const PORT = process.env.PORT || 3000;
