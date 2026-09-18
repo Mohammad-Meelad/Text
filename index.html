@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Real-Time Chat Application</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      background-color: #f4f4f9;
+    }
+    h2 {
+      margin-top: 0;
+      color: #333;
+    }
+    #chat-box {
+      flex: 1;
+      border: 1px solid #ccc;
+      padding: 15px;
+      overflow-y: auto;
+      margin-bottom: 15px;
+      border-radius: 8px;
+      background-color: #ffffff;
+    }
+    .message {
+      margin-bottom: 10px;
+      padding: 8px 12px;
+      background-color: #e1f5fe;
+      border-radius: 6px;
+      width: fit-content;
+      max-width: 80%;
+      word-wrap: break-word;
+    }
+    #form {
+      display: flex;
+      gap: 10px;
+    }
+    #input {
+      flex: 1;
+      padding: 12px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+    button {
+      padding: 12px 24px;
+      font-size: 16px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>Real-Time Chat</h2>
+  <div id="chat-box"></div>
+
+  <form id="form" action="">
+    <input id="input" autocomplete="off" placeholder="Type a message..." />
+    <button type="submit">Send</button>
+  </form>
+
+  <!-- Socket.IO Client Library -->
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script>
+    // Replace with your exact Render URL after deploying your service
+    const BACKEND_URL = "https://YOUR-RENDER-APP-NAME.onrender.com";
+
+    const socket = io(BACKEND_URL);
+
+    const form = document.getElementById('form');
+    const input = document.getElementById('input');
+    const chatBox = document.getElementById('chat-box');
+
+    // Send message on form submit
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (input.value.trim()) {
+        socket.emit('chat message', input.value);
+        input.value = '';
+      }
+    });
+
+    // Receive and render message
+    socket.on('chat message', (msg) => {
+      const item = document.createElement('div');
+      item.classList.add('message');
+      item.textContent = msg;
+      chatBox.appendChild(item);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    });
+  </script>
+</body>
+</html>
