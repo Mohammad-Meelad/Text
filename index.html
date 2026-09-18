@@ -3,90 +3,247 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Real-Time Chat Application</title>
+  <title>WhatsApp Web Style Chat</title>
   <style>
     * {
       box-sizing: border-box;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
     body {
-      font-family: Arial, sans-serif;
       margin: 0;
-      padding: 20px;
+      padding: 0;
+      background-color: #d1d7db;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    
+    /* Login / Join Room Screen */
+    #login-container {
+      background: white;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      width: 320px;
       display: flex;
       flex-direction: column;
-      height: 100vh;
-      background-color: #f4f4f9;
+      gap: 15px;
     }
-    h2 {
-      margin-top: 0;
-      color: #333;
+    #login-container h2 {
+      margin: 0 0 10px 0;
+      color: #075e54;
+      text-align: center;
+    }
+    #login-container input {
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      font-size: 14px;
+    }
+    #login-container button {
+      padding: 10px;
+      background-color: #25d366;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 15px;
+    }
+    #login-container button:hover {
+      background-color: #1ebc57;
+    }
+    #error-msg {
+      color: red;
+      font-size: 12px;
+      text-align: center;
+      display: none;
+    }
+
+    /* WhatsApp Chat Interface */
+    #chat-container {
+      display: none;
+      flex-direction: column;
+      width: 100%;
+      max-width: 600px;
+      height: 90vh;
+      background-color: #e5ddd5;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      overflow: hidden;
+    }
+    #chat-header {
+      background-color: #075e54;
+      color: white;
+      padding: 15px;
+      font-weight: bold;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
     #chat-box {
       flex: 1;
-      border: 1px solid #ccc;
       padding: 15px;
       overflow-y: auto;
-      margin-bottom: 15px;
-      border-radius: 8px;
-      background-color: #ffffff;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
     }
-    .message {
-      margin-bottom: 10px;
+
+    /* Message Bubbles */
+    .message-wrapper {
+      display: flex;
+      flex-direction: column;
+      max-width: 70%;
+    }
+    .message-wrapper.sent {
+      align-self: flex-end;
+    }
+    .message-wrapper.received {
+      align-self: flex-start;
+    }
+    .message-wrapper.system {
+      align-self: center;
+      max-width: 90%;
+    }
+
+    .sender-name {
+      font-size: 11px;
+      color: #666;
+      margin-bottom: 2px;
+      margin-left: 4px;
+      font-weight: 600;
+    }
+
+    .message-bubble {
       padding: 8px 12px;
-      background-color: #e1f5fe;
-      border-radius: 6px;
-      width: fit-content;
-      max-width: 80%;
+      border-radius: 8px;
+      font-size: 14px;
+      line-height: 1.4;
       word-wrap: break-word;
+      box-shadow: 0 1px 1px rgba(0,0,0,0.1);
     }
+    
+    /* Sent messages (Blue/Green WhatsApp right align) */
+    .sent .message-bubble {
+      background-color: #dcf8c6;
+      border-top-right-radius: 0;
+    }
+    
+    /* Received messages (Grey left align) */
+    .received .message-bubble {
+      background-color: #ffffff;
+      border-top-left-radius: 0;
+    }
+
+    .system .message-bubble {
+      background-color: rgba(225, 245, 254, 0.9);
+      color: #555;
+      font-size: 12px;
+      border-radius: 12px;
+      padding: 4px 12px;
+    }
+
+    /* Input Form */
     #form {
       display: flex;
+      padding: 10px;
+      background-color: #f0f0f0;
       gap: 10px;
     }
     #input {
       flex: 1;
-      padding: 12px;
-      font-size: 16px;
-      border: 1px solid #ccc;
-      border-radius: 6px;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 20px;
+      font-size: 14px;
+      outline: none;
     }
-    button {
-      padding: 12px 24px;
-      font-size: 16px;
-      background-color: #007bff;
+    #send-btn {
+      background-color: #075e54;
       color: white;
       border: none;
-      border-radius: 6px;
+      padding: 10px 18px;
+      border-radius: 50%;
       cursor: pointer;
-    }
-    button:hover {
-      background-color: #0056b3;
+      font-weight: bold;
     }
   </style>
 </head>
 <body>
 
-  <h2>Real-Time Chat</h2>
-  <div id="chat-box"></div>
+  <!-- Sign In & Group Setup Screen -->
+  <div id="login-container">
+    <h2>Join or Create Group</h2>
+    <input id="username" type="text" placeholder="Your Name" required />
+    <input id="room" type="text" placeholder="Group Name" required />
+    <input id="password" type="password" placeholder="Room Password (Optional)" />
+    <button id="join-btn">Join Chat</button>
+    <div id="error-msg"></div>
+  </div>
 
-  <form id="form" action="">
-    <input id="input" autocomplete="off" placeholder="Type a message..." />
-    <button type="submit">Send</button>
-  </form>
+  <!-- Main Chat Window -->
+  <div id="chat-container">
+    <div id="chat-header">
+      <span id="header-room-name">Group Name</span>
+      <span id="header-user-name" style="font-size: 12px; opacity: 0.8;"></span>
+    </div>
+    <div id="chat-box"></div>
+    <form id="form" action="">
+      <input id="input" autocomplete="off" placeholder="Type a message..." />
+      <button id="send-btn" type="submit">➤</button>
+    </form>
+  </div>
 
-  <!-- Socket.IO Client Library -->
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <script>
-    // Replace with your exact Render URL after deploying your service
-    const BACKEND_URL = "https://text-p3e7.onrender.com";
+    // REPLACE THIS with your Render URL once deployed
+    const BACKEND_URL = "https://YOUR-RENDER-APP-NAME.onrender.com";
 
     const socket = io(BACKEND_URL);
+
+    const loginContainer = document.getElementById('login-container');
+    const chatContainer = document.getElementById('chat-container');
+    const errorMsg = document.getElementById('error-msg');
+    
+    const usernameInput = document.getElementById('username');
+    const roomInput = document.getElementById('room');
+    const passwordInput = document.getElementById('password');
+    const joinBtn = document.getElementById('join-btn');
 
     const form = document.getElementById('form');
     const input = document.getElementById('input');
     const chatBox = document.getElementById('chat-box');
+    const headerRoomName = document.getElementById('header-room-name');
+    const headerUserName = document.getElementById('header-user-name');
 
-    // Send message on form submit
+    // Join Group Action
+    joinBtn.addEventListener('click', () => {
+      const username = usernameInput.value.trim();
+      const room = roomInput.value.trim();
+      const password = passwordInput.value.trim();
+
+      if (!username || !room) {
+        errorMsg.textContent = "Name and Group Name are required.";
+        errorMsg.style.display = "block";
+        return;
+      }
+
+      socket.emit('join room', { username, room, password }, (response) => {
+        if (response.success) {
+          loginContainer.style.display = 'none';
+          chatContainer.style.display = 'flex';
+          headerRoomName.textContent = room;
+          headerUserName.textContent = `Signed in as: ${username}`;
+        } else {
+          errorMsg.textContent = response.message;
+          errorMsg.style.display = "block";
+        }
+      });
+    });
+
+    // Send Message
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       if (input.value.trim()) {
@@ -95,14 +252,38 @@
       }
     });
 
-    // Receive and render message
-    socket.on('chat message', (msg) => {
-      const item = document.createElement('div');
-      item.classList.add('message');
-      item.textContent = msg;
-      chatBox.appendChild(item);
+    // Receive Message
+    socket.on('chat message', (data) => {
+      const wrapper = document.createElement('div');
+      wrapper.classList.add('message-wrapper');
+
+      if (data.system) {
+        wrapper.classList.add('system');
+        wrapper.innerHTML = `<div class="message-bubble">${data.text}</div>`;
+      } else {
+        const isSelf = data.senderId === socket.id;
+
+        if (isSelf) {
+          wrapper.classList.add('sent');
+          wrapper.innerHTML = `<div class="message-bubble">${escapeHtml(data.text)}</div>`;
+        } else {
+          wrapper.classList.add('received');
+          wrapper.innerHTML = `
+            <span class="sender-name">${escapeHtml(data.username)}</span>
+            <div class="message-bubble">${escapeHtml(data.text)}</div>
+          `;
+        }
+      }
+
+      chatBox.appendChild(wrapper);
       chatBox.scrollTop = chatBox.scrollHeight;
     });
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.innerText = text;
+      return div.innerHTML;
+    }
   </script>
 </body>
 </html>
