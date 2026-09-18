@@ -5,274 +5,44 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Global Web Chat</title>
   <style>
-    * {
-      box-sizing: border-box;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    }
-    body {
-      margin: 0;
-      padding: 0;
-      background-color: #d1d7db;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-    }
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    body { margin: 0; padding: 0; background-color: #d1d7db; display: flex; justify-content: center; align-items: center; height: 100vh; }
 
-    /* Connection Loading Screen */
-    #loading-screen {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background-color: #111b21;
-      color: #e9edef;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      z-index: 1000;
-      gap: 15px;
-    }
-    .spinner {
-      width: 48px;
-      height: 48px;
-      border: 4px solid #202c33;
-      border-top: 4px solid #00a884;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-    #loading-subtext {
-      font-size: 13px;
-      color: #8696a0;
-    }
+    #loading-screen { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: #111b21; color: #e9edef; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; gap: 15px; }
+    .spinner { width: 48px; height: 48px; border: 4px solid #202c33; border-top: 4px solid #00a884; border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-    /* Modal Overlay Base */
-    .modal-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background: rgba(0, 0, 0, 0.5);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 100;
-    }
-    .modal-box {
-      background: white;
-      padding: 25px;
-      border-radius: 12px;
-      width: 340px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
-      animation: popIn 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    }
-    @keyframes popIn {
-      from { transform: scale(0.8); opacity: 0; }
-      to { transform: scale(1); opacity: 1; }
-    }
+    .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.5); display: flex; justify-content: center; align-items: center; z-index: 100; }
+    .modal-box { background: white; padding: 25px; border-radius: 12px; width: 340px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.2); animation: popIn 0.25s ease; }
+    @keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
-    .modal-box h3 {
-      margin: 0 0 5px 0;
-      color: #075e54;
-      text-align: center;
-    }
-    .modal-box input {
-      padding: 10px;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      font-size: 14px;
-      outline: none;
-    }
-    .modal-box input:focus {
-      border-color: #00a884;
-    }
-    .modal-actions {
-      display: flex;
-      gap: 10px;
-      margin-top: 5px;
-    }
-    .btn-primary {
-      flex: 1;
-      padding: 10px;
-      background-color: #25d366;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      font-weight: bold;
-      cursor: pointer;
-    }
+    .modal-box h3 { margin: 0 0 5px 0; color: #075e54; text-align: center; }
+    .modal-box input { padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; outline: none; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 5px; }
+    .btn-primary { flex: 1; padding: 10px; background-color: #25d366; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
     .btn-primary:hover { background-color: #1ebc57; }
-    .btn-secondary {
-      flex: 1;
-      padding: 10px;
-      background-color: #888;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      font-weight: bold;
-      cursor: pointer;
-    }
-    .modal-error {
-      color: red;
-      font-size: 12px;
-      text-align: center;
-      display: none;
-    }
+    .btn-secondary { flex: 1; padding: 10px; background-color: #888; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+    .modal-error { color: red; font-size: 12px; text-align: center; display: none; }
+    .modal-success { color: green; font-size: 12px; text-align: center; display: none; }
 
-    /* Admin Panel Styling */
-    .admin-modal-box {
-      width: 500px;
-      max-height: 80vh;
-      overflow-y: auto;
-    }
-    .admin-section {
-      border: 1px solid #ddd;
-      padding: 10px;
-      border-radius: 6px;
-      margin-bottom: 10px;
-    }
-    .admin-section h4 {
-      margin: 0 0 8px 0;
-      color: #075e54;
-    }
-    .admin-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 6px 0;
-      border-bottom: 1px solid #eee;
-      font-size: 13px;
-    }
-    .btn-danger {
-      background-color: #d9534f;
-      color: white;
-      border: none;
-      padding: 4px 8px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 11px;
-    }
-    .btn-danger:hover { background-color: #c9302c; }
+    .toggle-auth { font-size: 12px; text-align: center; color: #075e54; cursor: pointer; text-decoration: underline; margin-top: 5px; }
 
-    /* Main Layout */
-    #app-container {
-      display: none;
-      width: 95vw;
-      max-width: 1000px;
-      height: 90vh;
-      background: #ffffff;
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-      overflow: hidden;
-      flex-direction: row;
-    }
-
-    /* Left Sidebar */
-    #sidebar {
-      width: 32%;
-      min-width: 260px;
-      background-color: #f0f2f5;
-      border-right: 1px solid #e0e0e0;
-      display: flex;
-      flex-direction: column;
-    }
-    #sidebar-header {
-      background-color: #075e54;
-      color: white;
-      padding: 15px;
-      font-weight: bold;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    #admin-panel-btn {
-      display: none;
-      background-color: #ff9800;
-      color: white;
-      border: none;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 11px;
-      font-weight: bold;
-      cursor: pointer;
-    }
-    #open-create-modal-btn {
-      margin: 10px;
-      padding: 10px;
-      background-color: #128c7e;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-weight: bold;
-      transition: background 0.2s ease;
-    }
-    #open-create-modal-btn:hover { background-color: #0d6e63; }
-    #room-list {
-      flex: 1;
-      overflow-y: auto;
-      list-style: none;
-      margin: 0;
-      padding: 0;
-    }
-    .room-item {
-      padding: 12px 15px;
-      border-bottom: 1px solid #e0e0e0;
-      cursor: pointer;
-      font-size: 14px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .room-item:hover { background-color: #e9edef; }
+    #app-container { display: none; width: 95vw; max-width: 1000px; height: 90vh; background: #ffffff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); overflow: hidden; flex-direction: row; }
+    #sidebar { width: 32%; min-width: 260px; background-color: #f0f2f5; border-right: 1px solid #e0e0e0; display: flex; flex-direction: column; }
+    #sidebar-header { background-color: #075e54; color: white; padding: 15px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+    #admin-panel-btn { display: none; background-color: #ff9800; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; cursor: pointer; }
+    #open-create-modal-btn { margin: 10px; padding: 10px; background-color: #128c7e; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+    #room-list { flex: 1; overflow-y: auto; list-style: none; margin: 0; padding: 0; }
+    .room-item { padding: 12px 15px; border-bottom: 1px solid #e0e0e0; cursor: pointer; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
     .room-item.active { background-color: #d9fdd3; font-weight: bold; }
-    .delete-btn {
-      color: #ff4d4d;
-      font-weight: bold;
-      padding: 2px 6px;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    .delete-btn:hover { background-color: #ffe6e6; }
+    .delete-btn { color: #ff4d4d; font-weight: bold; padding: 2px 6px; cursor: pointer; }
 
-    /* Right Panel */
-    #chat-panel {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      background-color: #e5ddd5;
-    }
-    #chat-header {
-      background-color: #f0f2f5;
-      padding: 15px;
-      border-bottom: 1px solid #e0e0e0;
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-    }
+    #chat-panel { flex: 1; display: flex; flex-direction: column; background-color: #e5ddd5; }
+    #chat-header { background-color: #f0f2f5; padding: 15px; border-bottom: 1px solid #e0e0e0; display: flex; flex-direction: column; gap: 3px; }
     #header-room-title { font-weight: bold; font-size: 16px; }
     #header-room-desc { font-size: 12px; color: #666; }
+    #chat-box { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
 
-    #chat-box {
-      flex: 1;
-      padding: 15px;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    /* Message Bubbles */
     .message-wrapper { display: flex; flex-direction: column; max-width: 70%; }
     .message-wrapper.sent { align-self: flex-end; }
     .message-wrapper.received { align-self: flex-start; }
@@ -283,7 +53,6 @@
     .received .message-bubble { background-color: #ffffff; border-top-left-radius: 0; }
     .system .message-bubble { background-color: rgba(225, 245, 254, 0.9); color: #555; font-size: 12px; border-radius: 12px; padding: 4px 12px; }
 
-    /* Form Input */
     #message-form { display: flex; padding: 10px; background-color: #f0f0f0; gap: 10px; }
     #message-input { flex: 1; padding: 10px 15px; border: none; border-radius: 20px; font-size: 14px; outline: none; }
     #send-btn { background-color: #075e54; color: white; border: none; padding: 10px 18px; border-radius: 50%; cursor: pointer; font-weight: bold; }
@@ -291,78 +60,45 @@
 </head>
 <body>
 
-  <!-- Startup Loading Screen -->
+  <!-- Loading Screen -->
   <div id="loading-screen">
     <div class="spinner"></div>
     <div style="font-weight: bold; font-size: 18px;">Connecting to Server...</div>
-    <div id="loading-subtext">Waking up backend (this may take up to 50s)...</div>
   </div>
 
-  <!-- Modal 1: Sign-In -->
-  <div id="login-modal" class="modal-overlay" style="display: none;">
-    <div class="modal-box">
+  <!-- Sign In & Registration Modals -->
+  <div id="auth-modal" class="modal-overlay" style="display: none;">
+    <!-- Sign In View -->
+    <div id="login-box" class="modal-box">
       <h3>Sign In</h3>
       <input id="login-username" type="text" placeholder="Your Name" />
       <input id="login-password" type="password" placeholder="Password" />
       <div id="login-error" class="modal-error"></div>
-      <button id="login-btn" class="btn-primary">Sign In / Register</button>
+      <button id="login-btn" class="btn-primary">Sign In</button>
+      <div class="toggle-auth" id="show-register-btn">Don't have an account? Register with Email</div>
+    </div>
+
+    <!-- Registration View -->
+    <div id="register-box" class="modal-box" style="display: none;">
+      <h3>Create Account</h3>
+      <input id="reg-username" type="text" placeholder="Your Name" />
+      <input id="reg-email" type="email" placeholder="Your Email Address" />
+      <input id="reg-password" type="password" placeholder="Password" />
+      <div id="reg-error" class="modal-error"></div>
+      <div id="reg-success" class="modal-success"></div>
+      <button id="send-code-btn" class="btn-primary">Send Verification Code</button>
+
+      <!-- Code Step -->
+      <div id="code-step" style="display: none; flex-direction: column; gap: 8px; margin-top: 10px;">
+        <input id="reg-code" type="text" placeholder="6-Digit Verification Code" />
+        <button id="verify-code-btn" class="btn-primary">Verify Code & Complete</button>
+      </div>
+
+      <div class="toggle-auth" id="show-login-btn">Already have an account? Sign In</div>
     </div>
   </div>
 
-  <!-- Modal 2: Create Group Pop-up -->
-  <div id="create-modal" class="modal-overlay" style="display: none;">
-    <div class="modal-box">
-      <h3>✨ Create Group</h3>
-      <input id="create-room-name" type="text" placeholder="Group Name" />
-      <input id="create-room-pass" type="password" placeholder="Group Password (Optional)" />
-      <div id="create-error" class="modal-error"></div>
-      <div class="modal-actions">
-        <button id="create-confirm-btn" class="btn-primary">Create</button>
-        <button id="create-cancel-btn" class="btn-secondary">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modal 3: Password Pop-up -->
-  <div id="join-pass-modal" class="modal-overlay" style="display: none;">
-    <div class="modal-box">
-      <h3 id="join-modal-title">Enter Group Password</h3>
-      <input id="join-room-pass" type="password" placeholder="Group Password" />
-      <div id="join-pass-error" class="modal-error"></div>
-      <div class="modal-actions">
-        <button id="join-confirm-btn" class="btn-primary">Join</button>
-        <button id="join-cancel-btn" class="btn-secondary">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modal 4: Admin Panel -->
-  <div id="admin-modal" class="modal-overlay" style="display: none;">
-    <div class="modal-box admin-modal-box">
-      <h3>🛡️ Admin Panel</h3>
-      
-      <div class="admin-section">
-        <h4>Active Online Users</h4>
-        <div id="admin-active-users"></div>
-      </div>
-
-      <div class="admin-section">
-        <h4>Banned Users</h4>
-        <div id="admin-banned-users"></div>
-      </div>
-
-      <div class="admin-section">
-        <h4>Clear Group Chat History</h4>
-        <div id="admin-room-list"></div>
-      </div>
-
-      <div class="modal-actions">
-        <button id="admin-close-btn" class="btn-secondary">Close Panel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Main Application UI -->
+  <!-- Main App -->
   <div id="app-container">
     <div id="sidebar">
       <div id="sidebar-header">
@@ -393,44 +129,34 @@
 
     let activeRoom = null;
     let currentUser = null;
-    let isAdminUser = false;
-    let pendingJoinRoom = null;
-    let availableRooms = [];
 
-    // Elements
+    // UI Elements
     const loadingScreen = document.getElementById('loading-screen');
-    const loginModal = document.getElementById('login-modal');
-    const createModal = document.getElementById('create-modal');
-    const joinPassModal = document.getElementById('join-pass-modal');
-    const adminModal = document.getElementById('admin-modal');
-    const appContainer = document.getElementById('app-container');
+    const authModal = document.getElementById('auth-modal');
+    const loginBox = document.getElementById('login-box');
+    const registerBox = document.getElementById('register-box');
+    
+    const showRegisterBtn = document.getElementById('show-register-btn');
+    const showLoginBtn = document.getElementById('show-login-btn');
+
+    const regUsername = document.getElementById('reg-username');
+    const regEmail = document.getElementById('reg-email');
+    const regPassword = document.getElementById('reg-password');
+    const regCode = document.getElementById('reg-code');
+    const sendCodeBtn = document.getElementById('send-code-btn');
+    const verifyCodeBtn = document.getElementById('verify-code-btn');
+    const codeStep = document.getElementById('code-step');
+    const regError = document.getElementById('reg-error');
+    const regSuccess = document.getElementById('reg-success');
 
     const loginUsername = document.getElementById('login-username');
     const loginPassword = document.getElementById('login-password');
     const loginBtn = document.getElementById('login-btn');
     const loginError = document.getElementById('login-error');
 
-    const createRoomName = document.getElementById('create-room-name');
-    const createRoomPass = document.getElementById('create-room-pass');
-    const createConfirmBtn = document.getElementById('create-confirm-btn');
-    const createCancelBtn = document.getElementById('create-cancel-btn');
-    const createError = document.getElementById('create-error');
-
-    const joinRoomPass = document.getElementById('join-room-pass');
-    const joinConfirmBtn = document.getElementById('join-confirm-btn');
-    const joinCancelBtn = document.getElementById('join-cancel-btn');
-    const joinPassError = document.getElementById('join-pass-error');
-    const joinModalTitle = document.getElementById('join-modal-title');
-
-    const openCreateModalBtn = document.getElementById('open-create-modal-btn');
+    const appContainer = document.getElementById('app-container');
     const roomListEl = document.getElementById('room-list');
     const userDisplay = document.getElementById('user-display');
-    const adminPanelBtn = document.getElementById('admin-panel-btn');
-    const adminCloseBtn = document.getElementById('admin-close-btn');
-
-    const adminActiveUsers = document.getElementById('admin-active-users');
-    const adminBannedUsers = document.getElementById('admin-banned-users');
-    const adminRoomList = document.getElementById('admin-room-list');
 
     const headerRoomTitle = document.getElementById('header-room-title');
     const headerRoomDesc = document.getElementById('header-room-desc');
@@ -441,12 +167,60 @@
 
     socket.on('connect', () => {
       loadingScreen.style.display = 'none';
-      if (!currentUser) {
-        loginModal.style.display = 'flex';
-      }
+      if (!currentUser) authModal.style.display = 'flex';
     });
 
-    // Sign In
+    // Toggle Sign In / Register Forms
+    showRegisterBtn.addEventListener('click', () => {
+      loginBox.style.display = 'none';
+      registerBox.style.display = 'flex';
+    });
+
+    showLoginBtn.addEventListener('click', () => {
+      registerBox.style.display = 'none';
+      loginBox.style.display = 'flex';
+    });
+
+    // Request Email Code
+    sendCodeBtn.addEventListener('click', () => {
+      const username = regUsername.value.trim();
+      const email = regEmail.value.trim();
+      const password = regPassword.value.trim();
+
+      regError.style.display = 'none';
+      regSuccess.style.display = 'none';
+
+      socket.emit('request code', { username, email, password }, (res) => {
+        if (res.success) {
+          regSuccess.textContent = res.message;
+          regSuccess.style.display = 'block';
+          codeStep.style.display = 'flex';
+        } else {
+          regError.textContent = res.message;
+          regError.style.display = 'block';
+        }
+      });
+    });
+
+    // Verify Code
+    verifyCodeBtn.addEventListener('click', () => {
+      const email = regEmail.value.trim();
+      const code = regCode.value.trim();
+
+      socket.emit('verify code', { email, code }, (res) => {
+        if (res.success) {
+          alert(res.message);
+          registerBox.style.display = 'none';
+          loginBox.style.display = 'flex';
+          loginUsername.value = regUsername.value.trim();
+        } else {
+          regError.textContent = res.message;
+          regError.style.display = 'block';
+        }
+      });
+    });
+
+    // Login Action
     loginBtn.addEventListener('click', () => {
       const username = loginUsername.value.trim();
       const password = loginPassword.value.trim();
@@ -454,18 +228,11 @@
       socket.emit('login', { username, password }, (res) => {
         if (res.success) {
           currentUser = username;
-          isAdminUser = res.isAdmin;
-
-          loginModal.style.display = 'none';
+          authModal.style.display = 'none';
           appContainer.style.display = 'flex';
           userDisplay.textContent = username;
 
-          if (isAdminUser) {
-            adminPanelBtn.style.display = 'inline-block';
-          }
-
-          availableRooms = res.rooms;
-          renderRoomList(availableRooms);
+          renderRoomList(res.rooms);
           joinGroup("International Talk");
         } else {
           loginError.textContent = res.message;
@@ -474,243 +241,39 @@
       });
     });
 
-    // Render Group List
     function renderRoomList(rooms) {
-      availableRooms = rooms;
       roomListEl.innerHTML = '';
-
-      const sorted = [...rooms].sort((a, b) => {
-        if (a.name === "International Talk") return -1;
-        if (b.name === "International Talk") return 1;
-        return a.name.localeCompare(b.name);
-      });
-
-      sorted.forEach((room) => {
+      rooms.forEach((room) => {
         const li = document.createElement('li');
         li.classList.add('room-item');
         if (room.name === activeRoom) li.classList.add('active');
 
-        let roomLabel = room.name === "International Talk" 
+        let label = room.name === "International Talk" 
           ? `<b>International Talk</b>` 
-          : `# ${escapeHtml(room.name)} ${room.hasPassword ? '🔒' : ''}`;
+          : `# ${escapeHtml(room.name)}`;
 
-        let canDelete = (room.owner === currentUser || isAdminUser) && room.name !== "International Talk";
-        let deleteBtnHtml = canDelete
-          ? `<span class="delete-btn" onclick="deleteRoom(event, '${escapeHtml(room.name)}')">✕</span>`
-          : '';
-
-        li.innerHTML = `<span>${roomLabel}</span> ${deleteBtnHtml}`;
-
-        li.addEventListener('click', (e) => {
-          if (e.target.classList.contains('delete-btn')) return;
-          if (room.name === activeRoom) return;
-
-          if (room.hasPassword && !isAdminUser) {
-            pendingJoinRoom = room.name;
-            joinModalTitle.textContent = `Password for "${room.name}"`;
-            joinRoomPass.value = '';
-            joinPassError.style.display = 'none';
-            joinPassModal.style.display = 'flex';
-          } else {
-            joinGroup(room.name);
-          }
-        });
-
+        li.innerHTML = `<span>${label}</span>`;
+        li.addEventListener('click', () => joinGroup(room.name));
         roomListEl.appendChild(li);
       });
     }
 
-    // Modal Control Events
-    openCreateModalBtn.addEventListener('click', () => {
-      createRoomName.value = '';
-      createRoomPass.value = '';
-      createError.style.display = 'none';
-      createModal.style.display = 'flex';
-    });
-
-    createCancelBtn.addEventListener('click', () => createModal.style.display = 'none');
-
-    createConfirmBtn.addEventListener('click', () => {
-      const roomName = createRoomName.value.trim();
-      const roomPassword = createRoomPass.value.trim();
-
-      socket.emit('create room', { roomName, roomPassword }, (res) => {
-        if (res.success) {
-          createModal.style.display = 'none';
-          joinGroup(roomName, roomPassword);
-        } else {
-          createError.textContent = res.message;
-          createError.style.display = 'block';
-        }
-      });
-    });
-
-    joinCancelBtn.addEventListener('click', () => {
-      joinPassModal.style.display = 'none';
-      pendingJoinRoom = null;
-    });
-
-    joinConfirmBtn.addEventListener('click', () => {
-      const roomPassword = joinRoomPass.value.trim();
-      if (pendingJoinRoom) {
-        joinGroup(pendingJoinRoom, roomPassword, (success, msg) => {
-          if (success) {
-            joinPassModal.style.display = 'none';
-            pendingJoinRoom = null;
-          } else {
-            joinPassError.textContent = msg;
-            joinPassError.style.display = 'block';
-          }
-        });
-      }
-    });
-
-    // Admin Dashboard Handlers
-    adminPanelBtn.addEventListener('click', () => {
-      loadAdminData();
-      adminModal.style.display = 'flex';
-    });
-
-    adminCloseBtn.addEventListener('click', () => {
-      adminModal.style.display = 'none';
-    });
-
-    function loadAdminData() {
-      socket.emit('admin get data', (res) => {
-        if (!res.success) return alert(res.message);
-
-        // Active Users List
-        adminActiveUsers.innerHTML = '';
-        res.activeUsers.forEach(user => {
-          if (user === currentUser) return;
-          const div = document.createElement('div');
-          div.classList.add('admin-item');
-          div.innerHTML = `
-            <span>${escapeHtml(user)}</span>
-            <div>
-              <button class="btn-danger" onclick="kickUser('${escapeHtml(user)}')">Kick</button>
-              <button class="btn-danger" onclick="banUser('${escapeHtml(user)}')">Ban</button>
-            </div>
-          `;
-          adminActiveUsers.appendChild(div);
-        });
-
-        // Banned Users List
-        adminBannedUsers.innerHTML = '';
-        res.bannedUsers.forEach(user => {
-          const div = document.createElement('div');
-          div.classList.add('admin-item');
-          div.innerHTML = `
-            <span>${escapeHtml(user)}</span>
-            <button class="btn-primary" style="padding:2px 6px; font-size:11px;" onclick="unbanUser('${escapeHtml(user)}')">Unban</button>
-          `;
-          adminBannedUsers.appendChild(div);
-        });
-
-        // Clear Room Messages List
-        adminRoomList.innerHTML = '';
-        res.rooms.forEach(room => {
-          const div = document.createElement('div');
-          div.classList.add('admin-item');
-          div.innerHTML = `
-            <span>${escapeHtml(room)}</span>
-            <button class="btn-danger" onclick="clearRoom('${escapeHtml(room)}')">Clear Messages</button>
-          `;
-          adminRoomList.appendChild(div);
-        });
-      });
-    }
-
-    window.kickUser = function(user) {
-      socket.emit('admin kick user', user, (res) => {
-        if (res.success) loadAdminData();
-        else alert(res.message);
-      });
-    };
-
-    window.banUser = function(user) {
-      socket.emit('admin ban user', user, (res) => {
-        if (res.success) loadAdminData();
-        else alert(res.message);
-      });
-    };
-
-    window.unbanUser = function(user) {
-      socket.emit('admin unban user', user, (res) => {
-        if (res.success) loadAdminData();
-        else alert(res.message);
-      });
-    };
-
-    window.clearRoom = function(room) {
-      if (confirm(`Clear all saved messages in group "${room}"?`)) {
-        socket.emit('admin clear messages', room, (res) => {
-          if (res.success) alert(`Cleared history for ${room}.`);
-          else alert(res.message);
-        });
-      }
-    };
-
-    // Join Group Action
-    function joinGroup(roomName, roomPassword = null, callback = null) {
-      socket.emit('join room', { roomName, roomPassword }, (res) => {
+    function joinGroup(roomName) {
+      socket.emit('join room', { roomName }, (res) => {
         if (res.success) {
           activeRoom = roomName;
           chatBox.innerHTML = '';
-
           headerRoomTitle.textContent = roomName;
-          headerRoomDesc.textContent = (roomName === "International Talk") 
-            ? "Global public room for everyone worldwide." 
-            : `Group Chat: ${roomName}`;
-
           messageInput.disabled = false;
           sendBtn.disabled = false;
 
-          renderRoomList(availableRooms);
-
-          if (res.history && Array.isArray(res.history)) {
+          if (res.history) {
             res.history.forEach(msg => renderSingleMessage(msg));
           }
-
-          if (callback) callback(true);
-        } else {
-          if (callback) callback(false, res.message);
-          else alert(res.message);
         }
       });
     }
 
-    // Delete Room
-    window.deleteRoom = function(e, roomName) {
-      e.stopPropagation();
-      if (confirm(`Are you sure you want to delete group "${roomName}"?`)) {
-        socket.emit('delete room', roomName, (res) => {
-          if (!res.success) alert(res.message);
-        });
-      }
-    };
-
-    // Socket Event Handlers
-    socket.on('room list update', (rooms) => renderRoomList(rooms));
-
-    socket.on('room deleted', (deletedRoom) => {
-      if (activeRoom === deletedRoom) {
-        alert(`The group "${deletedRoom}" was deleted.`);
-        joinGroup("International Talk");
-      }
-    });
-
-    socket.on('chat cleared', () => {
-      chatBox.innerHTML = '';
-      renderSingleMessage({ username: 'System', text: 'Chat history was cleared by Admin.', system: true });
-    });
-
-    socket.on('kicked', (reason) => {
-      alert(reason);
-      location.reload();
-    });
-
-    // Chat Message Rendering
     messageForm.addEventListener('submit', (e) => {
       e.preventDefault();
       if (messageInput.value.trim() && activeRoom) {
@@ -729,18 +292,12 @@
         wrapper.classList.add('system');
         wrapper.innerHTML = `<div class="message-bubble">${data.text}</div>`;
       } else {
-        const isSelf = data.senderId === socket.id || data.username === currentUser;
-
-        if (isSelf) {
-          wrapper.classList.add('sent');
-          wrapper.innerHTML = `<div class="message-bubble">${escapeHtml(data.text)}</div>`;
-        } else {
-          wrapper.classList.add('received');
-          wrapper.innerHTML = `
-            <span class="sender-name">${escapeHtml(data.username)}</span>
-            <div class="message-bubble">${escapeHtml(data.text)}</div>
-          `;
-        }
+        const isSelf = data.username === currentUser;
+        wrapper.classList.add(isSelf ? 'sent' : 'received');
+        wrapper.innerHTML = `
+          ${!isSelf ? `<span class="sender-name">${escapeHtml(data.username)}</span>` : ''}
+          <div class="message-bubble">${escapeHtml(data.text)}</div>
+        `;
       }
 
       chatBox.appendChild(wrapper);
