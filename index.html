@@ -480,7 +480,7 @@
       }
     });
 
-    // Join Room Action
+    // Join Room Action & Render Message History
     function joinGroup(roomName, roomPassword = null, callback = null) {
       socket.emit('join room', { roomName, roomPassword }, (res) => {
         if (res.success) {
@@ -496,6 +496,12 @@
           sendBtn.disabled = false;
 
           renderRoomList(availableRooms);
+
+          // Render entire room history sent back from server
+          if (res.history && Array.isArray(res.history)) {
+            res.history.forEach(msg => renderSingleMessage(msg));
+          }
+
           if (callback) callback(true);
         } else {
           if (callback) callback(false, res.message);
@@ -538,6 +544,10 @@
     });
 
     socket.on('chat message', (data) => {
+      renderSingleMessage(data);
+    });
+
+    function renderSingleMessage(data) {
       const wrapper = document.createElement('div');
       wrapper.classList.add('message-wrapper');
 
@@ -545,7 +555,7 @@
         wrapper.classList.add('system');
         wrapper.innerHTML = `<div class="message-bubble">${data.text}</div>`;
       } else {
-        const isSelf = data.senderId === socket.id;
+        const isSelf = data.senderId === socket.id || data.username === currentUser;
 
         if (isSelf) {
           wrapper.classList.add('sent');
@@ -561,7 +571,7 @@
 
       chatBox.appendChild(wrapper);
       chatBox.scrollTop = chatBox.scrollHeight;
-    });
+    }
 
     function escapeHtml(text) {
       const div = document.createElement('div');
