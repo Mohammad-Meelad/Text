@@ -36,12 +36,11 @@ if (MONGODB_URI) {
   console.warn('WARNING: MONGODB_URI variable missing. Server operating in memory.');
 }
 
-// Database Schemas
+// Database Schemas (Age is omitted from persistent storage)
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true, lowercase: true },
   displayName: { type: String, required: true },
   realName: { type: String, required: true },
-  age: { type: Number, required: true },
   bio: { type: String, default: '' },
   password: { type: String, required: true },
   email: { type: String, required: true },
@@ -54,10 +53,12 @@ const feedbackSchema = new mongoose.Schema({
   senderDisplayName: { type: String, required: true },
   text: { type: String, required: true },
   timestamp: { type: String, required: true },
-  reply: {
+  replies: [{
+    senderUsername: String,
+    senderDisplayName: String,
     text: String,
     timestamp: String
-  }
+  }]
 });
 
 const messageSchema = new mongoose.Schema({
@@ -86,7 +87,7 @@ const ADMIN_WHITELISTED_IPS = new Set([
   '::ffff:96.53.143.134'
 ]);
 
-// Auto-create Admin Account in Database
+// Auto-create Admin Account
 async function initAdmin() {
   if (mongoose.connection.readyState === 1) {
     const adminExists = await User.findOne({ username: ADMIN_USERNAME });
@@ -95,7 +96,6 @@ async function initAdmin() {
         username: ADMIN_USERNAME,
         displayName: ADMIN_DISPLAY,
         realName: "Meelad Mohammad",
-        age: 25,
         bio: "System Administrator",
         password: ADMIN_PASS,
         email: ADMIN_EMAIL,
@@ -113,7 +113,7 @@ const bannedUsers = new Set();
 const activeSockets = {};
 
 const rooms = {
-  "International Talk": { password: null, owner: "System" }
+  "International Talk": { password: null, owner: "System", managers: ["admin"] }
 };
 
 app.get('/', (req, res) => {
@@ -196,7 +196,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Step 2: Confirm Verification Code
+  // Step 2: Confirm Code
   socket.on('verify code', ({ email, code }, callback) => {
     const pending = pendingVerifications[email];
 
@@ -207,7 +207,7 @@ io.on('connection', (socket) => {
     callback({ success: true, message: 'Email verified! Please complete your registration form.' });
   });
 
-  // Step 3: Complete Account Registration
+  // Step 3: Complete Registration (Age used ONLY for approval and immediately discarded)
   socket.on('complete registration', async ({ email, age, realName, displayName, username, password, bio }, callback) => {
     const pending = pendingVerifications[email];
 
@@ -217,6 +217,13 @@ io.on('connection', (socket) => {
 
     if (!age || !realName || !displayName || !username || !password) {
       return callback({ success: false, message: 'All required fields must be filled.' });
+    }
+
+    // Age Approval Gate (Minimum 13 years old)
+    const parsedAge = parseInt(age, 10);
+    if (isNaN(parsedAge) || parsedAge < 13) {
+      delete pendingVerifications[email];
+      return callback({ success: false, message: 'Registration unapproved: You must be at least 13 years old to register.' });
     }
 
     const usernameRegex = /^[a-z0-9]+$/;
@@ -247,11 +254,11 @@ io.on('connection', (socket) => {
         return callback({ success: false, message: 'Username is already taken.' });
       }
 
+      // Save user WITHOUT age field
       await User.create({
         username,
         displayName,
         realName,
-        age: parseInt(age, 10),
         bio: bio || '',
         password,
         email,
@@ -261,7 +268,7 @@ io.on('connection', (socket) => {
     }
 
     delete pendingVerifications[email];
-    callback({ success: true, message: 'Account created successfully! You can now sign in.' });
+    callback({ success: true, message: 'Age approved! Account created successfully. You can now sign in.' });
   });
 
   // User Login
@@ -301,27 +308,31 @@ io.on('connection', (socket) => {
 
     callback({ 
       success: true, 
-      rooms: Object.keys(rooms).map(name => ({ name, hasPassword: !!rooms[name].password, owner: rooms[name].owner })), 
+      rooms: Object.keys(rooms).map(name => ({ 
+        name, 
+        hasPassword: !!rooms[name].password, 
+        owner: rooms[name].owner,
+        isManager: (rooms[name].managers || []).includes(cleanUsername)
+      })), 
       isAdmin: socket.data.isAdmin,
       displayName: socket.data.displayName,
       userFeedbackHistory
     });
   });
 
-  // Feedback System
+  // Feedback System (Real-time 2-Way Chat)
   socket.on('send admin message', async (msgText, callback) => {
     const username = socket.data.username;
     const displayName = socket.data.displayName;
 
     if (!username) return callback({ success: false, message: 'Must be logged in.' });
-    if (socket.data.isAdmin) return callback({ success: false, message: 'Admins cannot send feedback.' });
 
     let msgData = {
       senderUsername: username,
       senderDisplayName: displayName,
       text: msgText,
       timestamp: new Date().toLocaleTimeString(),
-      reply: null
+      replies: []
     };
 
     if (mongoose.connection.readyState === 1) {
@@ -337,30 +348,41 @@ io.on('connection', (socket) => {
     callback({ success: true, message: 'Feedback sent directly to Admin!', msgData });
   });
 
-  socket.on('admin reply feedback', async ({ messageId, replyText }, callback) => {
-    if (!socket.data.isAdmin) return callback({ success: false, message: 'Unauthorized' });
+  socket.on('reply feedback thread', async ({ feedbackId, text }, callback) => {
+    const username = socket.data.username;
+    const displayName = socket.data.displayName;
 
-    let feedbackObj = null;
+    if (!username) return callback({ success: false, message: 'Unauthorized.' });
+
+    const replyObj = {
+      senderUsername: username,
+      senderDisplayName: displayName,
+      text,
+      timestamp: new Date().toLocaleTimeString()
+    };
+
+    let updatedFeedback = null;
     if (mongoose.connection.readyState === 1) {
-      feedbackObj = await Feedback.findByIdAndUpdate(
-        messageId, 
-        { reply: { text: replyText, timestamp: new Date().toLocaleTimeString() } },
+      updatedFeedback = await Feedback.findByIdAndUpdate(
+        feedbackId,
+        { $push: { replies: replyObj } },
         { new: true }
       );
     }
 
-    if (feedbackObj) {
-      const userSocketId = activeSockets[feedbackObj.senderUsername];
-      if (userSocketId) {
-        io.to(userSocketId).emit('feedback reply received', feedbackObj);
+    if (updatedFeedback) {
+      const recipientUsername = socket.data.isAdmin ? updatedFeedback.senderUsername : ADMIN_USERNAME;
+      const targetSocketId = activeSockets[recipientUsername];
+      if (targetSocketId) {
+        io.to(targetSocketId).emit('feedback thread updated', updatedFeedback);
       }
     }
 
-    callback({ success: true, feedbackObj });
+    callback({ success: true, updatedFeedback });
   });
 
-  // Room Join & Chat Messages
-  socket.on('join room', async ({ roomName, roomPassword }, callback) => {
+  // Chat Room Actions & Message Deletions
+  socket.on('join room', async ({ roomName }, callback) => {
     const username = socket.data.username;
     const displayName = socket.data.displayName;
 
@@ -386,7 +408,11 @@ io.on('connection', (socket) => {
       history.reverse();
     }
 
-    callback({ success: true, history });
+    callback({ 
+      success: true, 
+      history,
+      isManager: socket.data.isAdmin || (room.managers || []).includes(username)
+    });
 
     const joinMsg = { roomName, username: 'System', displayName: 'System', text: `${displayName} joined ${roomName}.`, system: true };
     if (mongoose.connection.readyState === 1) await Message.create(joinMsg);
@@ -400,12 +426,51 @@ io.on('connection', (socket) => {
 
     if (!room || !username || bannedUsers.has(username)) return;
 
-    const msgData = { roomName: room, username, displayName, text: msgText, senderId: socket.id, system: false };
-    if (mongoose.connection.readyState === 1) await Message.create(msgData);
+    let msgData = { roomName: room, username, displayName, text: msgText, senderId: socket.id, system: false };
+    if (mongoose.connection.readyState === 1) {
+      const created = await Message.create(msgData);
+      msgData._id = created._id;
+    }
     io.to(room).emit('chat message', msgData);
   });
 
-  // Admin Data Panel
+  // Delete Single Message for Everyone
+  socket.on('delete message for everyone', async ({ messageId }, callback) => {
+    const roomName = socket.data.currentRoom;
+    const username = socket.data.username;
+    const room = rooms[roomName];
+
+    const isManager = socket.data.isAdmin || (room && (room.managers || []).includes(username));
+
+    if (!isManager) return callback({ success: false, message: 'Permission denied.' });
+
+    if (mongoose.connection.readyState === 1) {
+      await Message.findByIdAndDelete(messageId);
+    }
+
+    io.to(roomName).emit('message deleted for everyone', { messageId });
+    callback({ success: true });
+  });
+
+  // Delete All Messages from a Specific User in Current Room
+  socket.on('delete user messages in room', async ({ targetUsername }, callback) => {
+    const roomName = socket.data.currentRoom;
+    const username = socket.data.username;
+    const room = rooms[roomName];
+
+    const isManager = socket.data.isAdmin || (room && (room.managers || []).includes(username));
+
+    if (!isManager) return callback({ success: false, message: 'Permission denied.' });
+
+    if (mongoose.connection.readyState === 1) {
+      await Message.deleteMany({ roomName, username: targetUsername.toLowerCase() });
+    }
+
+    io.to(roomName).emit('user messages deleted', { targetUsername: targetUsername.toLowerCase() });
+    callback({ success: true });
+  });
+
+  // Admin Data & Bulk Upload
   socket.on('admin get data', async (callback) => {
     if (!socket.data.isAdmin) return callback({ success: false });
 
@@ -413,7 +478,7 @@ io.on('connection', (socket) => {
     let feedbackMessages = [];
 
     if (mongoose.connection.readyState === 1) {
-      registeredUsers = await User.find({}, 'username displayName realName age bio email verified createdIp');
+      registeredUsers = await User.find({}, 'username displayName realName bio email verified createdIp');
       feedbackMessages = await Feedback.find({});
     }
 
@@ -424,6 +489,60 @@ io.on('connection', (socket) => {
       bannedUsers: Array.from(bannedUsers),
       rooms: Object.keys(rooms),
       feedbackMessages
+    });
+  });
+
+  // Bulk Upload Accounts Following 3-Line Pattern
+  socket.on('admin bulk upload accounts', async ({ rawText }, callback) => {
+    if (!socket.data.isAdmin) return callback({ success: false, message: 'Unauthorized' });
+
+    const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    
+    if (lines.length % 3 !== 0) {
+      return callback({ 
+        success: false, 
+        message: `Invalid format! Total non-empty lines must be a multiple of 3 (DisplayName, Username, Password). Found ${lines.length} lines.` 
+      });
+    }
+
+    let createdCount = 0;
+    let skippedCount = 0;
+    const clientIp = getClientIp(socket);
+
+    for (let i = 0; i < lines.length; i += 3) {
+      const displayName = lines[i];
+      const username = lines[i + 1].toLowerCase().replace(/[^a-z0-9]/g, '');
+      const password = lines[i + 2];
+
+      if (!username || !password || !displayName) {
+        skippedCount++;
+        continue;
+      }
+
+      if (mongoose.connection.readyState === 1) {
+        const existing = await User.findOne({ username });
+        if (existing) {
+          skippedCount++;
+          continue;
+        }
+
+        await User.create({
+          username,
+          displayName,
+          realName: displayName,
+          bio: 'Bulk Imported Account',
+          password,
+          email: `${username}@easychat.local`,
+          verified: true,
+          createdIp: clientIp
+        });
+        createdCount++;
+      }
+    }
+
+    callback({ 
+      success: true, 
+      message: `Bulk import completed! Created: ${createdCount}, Skipped/Duplicates: ${skippedCount}.` 
     });
   });
 
