@@ -1,14 +1,13 @@
 {
-  "name": "socketio-chat",
+  "name": "easy-chat-backend",
   "version": "1.0.0",
-  "description": "Real-time chat with email verification and admin panel",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "nodemailer": "^6.9.7",
+    "mongoose": "^8.0.0",
     "socket.io": "^4.7.2"
   }
 }
