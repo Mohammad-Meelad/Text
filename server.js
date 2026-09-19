@@ -2,7 +2,6 @@ const express = require('express');
 const http = require('http');
 const https = require('https');
 const { Server } = require('socket.io');
-const nodemailer = require('nodemailer');
 
 const app = express();
 const server = http.createServer(app);
@@ -14,7 +13,7 @@ const io = new Server(server, {
   }
 });
 
-// Self-ping to keep Render free tier awake
+// Self-ping every 10 minutes to keep Render instance awake
 setInterval(() => {
   https.get('https://text-p3e7.onrender.com/', (res) => {
     console.log('Self-ping sent.');
@@ -22,15 +21,6 @@ setInterval(() => {
     console.error('Self-ping failed:', err.message);
   });
 }, 10 * 60 * 1000);
-
-// Configure Email Transporter (Gmail App Password)
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
-});
 
 // Admin credentials
 const ADMIN_USER = "Meelad Mohammad";
@@ -60,8 +50,8 @@ app.get('/', (req, res) => {
 
 io.on('connection', (socket) => {
 
-  // Step 1: Request Email Verification Code
-  socket.on('request code', ({ username, email, password }, callback) => {
+  // Step 1: Request Email Verification Code via Resend
+  socket.on('request code', async ({ username, email, password }, callback) => {
     if (!username || !email || !password) {
       return callback({ success: false, message: 'All fields are required.' });
     }
@@ -74,7 +64,7 @@ io.on('connection', (socket) => {
       return callback({ success: false, message: 'Username already registered.' });
     }
 
-    // Rate Limiting: 30 Seconds Cooldown per email
+    // 30 Seconds Cooldown per email
     const now = Date.now();
     if (pendingVerifications[email] && (now - pendingVerifications[email].lastSent < 30000)) {
       const remainingSeconds = Math.ceil((30000 - (now - pendingVerifications[email].lastSent)) / 1000);
@@ -87,36 +77,49 @@ io.on('connection', (socket) => {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     pendingVerifications[email] = { code, username, password, lastSent: now };
 
-    // Check if email environment variables are missing
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    const resendApiKey = process.env.RESEND_API_KEY;
+
+    if (!resendApiKey) {
       console.log(`\n--- [TEST MODE CODE] Verification code for ${email} is: ${code} ---\n`);
       return callback({ 
         success: true, 
-        message: `[TEST MODE] Code generated! (Check Render logs if EMAIL_USER environment variable isn't set).` 
+        message: `[TEST MODE] Code generated! (Check Render logs if RESEND_API_KEY is missing).` 
       });
     }
 
-    const mailOptions = {
-      from: `"Global Chat" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: 'Your Verification Code',
-      html: `
-        <div style="font-family: Arial, sans-serif; padding: 20px;">
-          <h2 style="color: #075e54;">Global Chat Sign-Up</h2>
-          <p>Hello <b>${username}</b>,</p>
-          <p>Your verification code is:</p>
-          <h1 style="color: #25d366; letter-spacing: 4px;">${code}</h1>
-        </div>
-      `
-    };
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: 'Global Chat <onboarding@resend.dev>',
+          to: [email],
+          subject: 'Your Verification Code',
+          html: `
+            <div style="font-family: Arial, sans-serif; padding: 20px;">
+              <h2 style="color: #075e54;">Global Chat Sign-Up</h2>
+              <p>Hello <b>${username}</b>,</p>
+              <p>Your verification code is:</p>
+              <h1 style="color: #25d366; letter-spacing: 4px;">${code}</h1>
+            </div>
+          `
+        })
+      });
 
-    transporter.sendMail(mailOptions, (error) => {
-      if (error) {
-        console.error('Email error:', error);
-        return callback({ success: false, message: 'Failed to send verification email. Check SMTP setup.' });
+      if (response.ok) {
+        callback({ success: true, message: 'Verification code sent to your email!' });
+      } else {
+        const errData = await response.json();
+        console.error('Resend error:', errData);
+        callback({ success: false, message: 'Failed to send verification email.' });
       }
-      callback({ success: true, message: 'Verification code sent to your email!' });
-    });
+    } catch (error) {
+      console.error('Fetch error:', error);
+      callback({ success: false, message: 'Email service connection error.' });
+    }
   });
 
   // Step 2: Verify Code
