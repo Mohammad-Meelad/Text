@@ -13,7 +13,6 @@ const io = new Server(server, {
   }
 });
 
-// Self-ping to keep Render free tier awake
 setInterval(() => {
   https.get('https://text-p3e7.onrender.com/', (res) => {
     console.log('Self-ping sent.');
@@ -22,12 +21,10 @@ setInterval(() => {
   });
 }, 10 * 60 * 1000);
 
-// Admin account credentials updated to 'admin'
 const ADMIN_USERNAME = "admin";
 const ADMIN_DISPLAY = "Meelad Mohammad";
 const ADMIN_PASS = "@Meelad@786@786";
 
-// Users database
 const users = {
   [ADMIN_USERNAME]: { password: ADMIN_PASS, email: "admin@easychat.com", displayName: ADMIN_DISPLAY }
 };
@@ -44,6 +41,7 @@ const messageHistory = {
   "International Talk": []
 };
 
+// Admin direct inbox store
 const adminDirectMessages = [];
 
 app.get('/', (req, res) => {
@@ -52,7 +50,6 @@ app.get('/', (req, res) => {
 
 io.on('connection', (socket) => {
 
-  // Step 1: Request Verification Code
   socket.on('request code', async ({ username, displayName, email, password }, callback) => {
     if (!username || !displayName || !email || !password) {
       return callback({ success: false, message: 'All fields are required.' });
@@ -89,7 +86,7 @@ io.on('connection', (socket) => {
     const resendApiKey = process.env.RESEND_API_KEY;
 
     if (!resendApiKey) {
-      console.log(`\n--- [TEST MODE CODE] Easy Chat verification code for ${email} is: ${code} ---\n`);
+      console.log(`\n--- [TEST MODE CODE] Verification code for ${email} is: ${code} ---\n`);
       return callback({ 
         success: true, 
         message: `[TEST MODE] Code generated! (Check Render logs if RESEND_API_KEY is missing).` 
@@ -111,7 +108,7 @@ io.on('connection', (socket) => {
             <div style="font-family: Arial, sans-serif; padding: 20px;">
               <h2 style="color: #075e54;">Easy Chat Verification</h2>
               <p>Hello <b>${displayName}</b> (@${username}),</p>
-              <p>Your verification code to complete your Easy Chat sign-up is:</p>
+              <p>Your verification code is:</p>
               <h1 style="color: #25d366; letter-spacing: 4px;">${code}</h1>
             </div>
           `
@@ -131,7 +128,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Step 2: Verify Code
   socket.on('verify code', ({ email, code }, callback) => {
     const pending = pendingVerifications[email];
 
@@ -150,10 +146,9 @@ io.on('connection', (socket) => {
     };
 
     delete pendingVerifications[email];
-    callback({ success: true, message: 'Account verified successfully! You can now log into Easy Chat.' });
+    callback({ success: true, message: 'Account verified successfully!' });
   });
 
-  // Sign In
   socket.on('login', ({ username, password }, callback) => {
     if (!username || !password) {
       return callback({ success: false, message: 'Username and Password are required.' });
@@ -184,12 +179,10 @@ io.on('connection', (socket) => {
       success: true, 
       rooms: getRoomList(), 
       isAdmin: socket.data.isAdmin,
-      displayName: socket.data.displayName,
-      adminMessages: socket.data.isAdmin ? adminDirectMessages : null
+      displayName: socket.data.displayName
     });
   });
 
-  // Direct Message to Admin
   socket.on('send admin message', (msgText, callback) => {
     const username = socket.data.username;
     const displayName = socket.data.displayName;
@@ -207,13 +200,12 @@ io.on('connection', (socket) => {
 
     const adminSocketId = activeSockets[ADMIN_USERNAME];
     if (adminSocketId) {
-      io.to(adminSocketId).emit('new admin message', msgData);
+      io.to(adminSocketId).emit('new feedback message', msgData);
     }
 
     callback({ success: true, message: 'Feedback sent directly to Admin!' });
   });
 
-  // Group Rooms Logic
   socket.on('create room', ({ roomName, roomPassword }, callback) => {
     const username = socket.data.username;
     if (!username) return callback({ success: false, message: 'Must be logged in.' });
@@ -270,7 +262,6 @@ io.on('connection', (socket) => {
     io.to(room).emit('chat message', msgData);
   });
 
-  // Admin Actions
   socket.on('admin get data', (callback) => {
     if (!socket.data.isAdmin) return callback({ success: false });
     callback({
