@@ -31,7 +31,7 @@ const users = {
 
 const pendingVerifications = {};
 const bannedUsers = new Set();
-const activeSockets = {};
+const activeSockets = {}; // { username: socketId }
 
 const rooms = {
   "International Talk": { password: null, owner: "System" }
@@ -41,7 +41,7 @@ const messageHistory = {
   "International Talk": []
 };
 
-// Admin direct inbox store
+// Admin direct feedback inbox store: [ { id, senderUsername, senderDisplayName, text, timestamp, reply: null } ]
 const adminDirectMessages = [];
 
 app.get('/', (req, res) => {
@@ -175,25 +175,33 @@ io.on('connection', (socket) => {
     socket.data.isAdmin = (cleanUsername === ADMIN_USERNAME);
     activeSockets[cleanUsername] = socket.id;
 
+    // Fetch previous user feedback if logging in as regular user
+    const userFeedbackHistory = adminDirectMessages.filter(msg => msg.senderUsername === cleanUsername);
+
     callback({ 
       success: true, 
       rooms: getRoomList(), 
       isAdmin: socket.data.isAdmin,
-      displayName: socket.data.displayName
+      displayName: socket.data.displayName,
+      userFeedbackHistory: userFeedbackHistory
     });
   });
 
+  // User sends feedback to Admin
   socket.on('send admin message', (msgText, callback) => {
     const username = socket.data.username;
     const displayName = socket.data.displayName;
 
     if (!username) return callback({ success: false, message: 'Must be logged in.' });
+    if (socket.data.isAdmin) return callback({ success: false, message: 'Admins cannot send feedback to themselves.' });
 
     const msgData = {
+      id: Date.now().toString(),
       senderUsername: username,
       senderDisplayName: displayName,
       text: msgText,
-      timestamp: new Date().toLocaleTimeString()
+      timestamp: new Date().toLocaleTimeString(),
+      reply: null
     };
 
     adminDirectMessages.push(msgData);
@@ -203,7 +211,28 @@ io.on('connection', (socket) => {
       io.to(adminSocketId).emit('new feedback message', msgData);
     }
 
-    callback({ success: true, message: 'Feedback sent directly to Admin!' });
+    callback({ success: true, message: 'Feedback sent directly to Admin!', msgData });
+  });
+
+  // Admin replies to a feedback message
+  socket.on('admin reply feedback', ({ messageId, replyText }, callback) => {
+    if (!socket.data.isAdmin) return callback({ success: false, message: 'Unauthorized' });
+
+    const feedbackObj = adminDirectMessages.find(msg => msg.id === messageId);
+    if (!feedbackObj) return callback({ success: false, message: 'Feedback message not found.' });
+
+    feedbackObj.reply = {
+      text: replyText,
+      timestamp: new Date().toLocaleTimeString()
+    };
+
+    // Notify user if online
+    const userSocketId = activeSockets[feedbackObj.senderUsername];
+    if (userSocketId) {
+      io.to(userSocketId).emit('feedback reply received', feedbackObj);
+    }
+
+    callback({ success: true, feedbackObj });
   });
 
   socket.on('create room', ({ roomName, roomPassword }, callback) => {
