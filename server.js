@@ -22,20 +22,19 @@ setInterval(() => {
   });
 }, 10 * 60 * 1000);
 
-// Admin account credentials
-const ADMIN_USERNAME = "meeladmohammad";
+// Admin account credentials updated to 'admin'
+const ADMIN_USERNAME = "admin";
 const ADMIN_DISPLAY = "Meelad Mohammad";
 const ADMIN_PASS = "@Meelad@786@786";
 
-// Users database: { username: { password, email, displayName } }
+// Users database
 const users = {
   [ADMIN_USERNAME]: { password: ADMIN_PASS, email: "admin@easychat.com", displayName: ADMIN_DISPLAY }
 };
 
-// Pending verifications store: { email: { code, username, displayName, password, lastSent } }
 const pendingVerifications = {};
 const bannedUsers = new Set();
-const activeSockets = {}; // { username: socketId }
+const activeSockets = {};
 
 const rooms = {
   "International Talk": { password: null, owner: "System" }
@@ -45,7 +44,6 @@ const messageHistory = {
   "International Talk": []
 };
 
-// Admin direct messages store: [ { senderUsername, senderDisplayName, text, timestamp } ]
 const adminDirectMessages = [];
 
 app.get('/', (req, res) => {
@@ -60,12 +58,11 @@ io.on('connection', (socket) => {
       return callback({ success: false, message: 'All fields are required.' });
     }
 
-    // Strict Username Validation: lowercase letters and numbers only
     const usernameRegex = /^[a-z0-9]+$/;
     if (!usernameRegex.test(username)) {
       return callback({ 
         success: false, 
-        message: 'Username must contain only lowercase letters and numbers (no spaces or special characters).' 
+        message: 'Username must contain only lowercase letters and numbers.' 
       });
     }
 
@@ -77,7 +74,6 @@ io.on('connection', (socket) => {
       return callback({ success: false, message: 'Username already taken.' });
     }
 
-    // 30 Seconds Cooldown
     const now = Date.now();
     if (pendingVerifications[email] && (now - pendingVerifications[email].lastSent < 30000)) {
       const remainingSeconds = Math.ceil((30000 - (now - pendingVerifications[email].lastSent)) / 1000);
@@ -209,7 +205,6 @@ io.on('connection', (socket) => {
 
     adminDirectMessages.push(msgData);
 
-    // Notify online admin if active
     const adminSocketId = activeSockets[ADMIN_USERNAME];
     if (adminSocketId) {
       io.to(adminSocketId).emit('new admin message', msgData);
