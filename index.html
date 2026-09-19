@@ -95,8 +95,9 @@
     .action-btn.logout { background-color: #d9534f; }
     
     #room-list { flex: 1; overflow-y: auto; list-style: none; margin: 0; padding: 0; }
-    .room-item { padding: 12px 15px; border-bottom: 1px solid #e0e0e0; cursor: pointer; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
-    .room-item.active { background-color: #d9fdd3; font-weight: bold; }
+    .room-item { padding: 12px 15px; border-bottom: 1px solid #e0e0e0; cursor: pointer; font-size: 14px; display: flex; justify-content: space-between; align-items: center; background-color: #ffffff; transition: background-color 0.2s; }
+    .room-item.active { background-color: #25d366 !important; color: white !important; font-weight: bold; }
+    .room-item.active span { color: white !important; }
 
     #chat-panel { flex: 1; display: flex; flex-direction: column; background-color: #e5ddd5; }
     #chat-header { background-color: #f0f2f5; padding: 12px 15px; border-bottom: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center; }
@@ -192,9 +193,25 @@
       <h3>➕ Create New Group</h3>
       <input id="new-room-name" type="text" placeholder="Group Name (e.g. Gamers Hub)" required />
       <input id="new-room-pass" type="password" placeholder="Password (Optional)" />
+      <label style="font-size: 12px; display: flex; align-items: center; gap: 6px;">
+        <input type="checkbox" id="new-room-private" /> Private Group (Invite-Only)
+      </label>
       <div class="modal-actions">
         <button id="submit-create-room-btn" class="btn-primary">Create Group</button>
         <button id="close-create-room-btn" class="btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Member Modal -->
+  <div id="add-member-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-box">
+      <h3>👥 Add Member to Group</h3>
+      <input id="add-member-target-room" type="hidden" />
+      <input id="add-member-username" type="text" placeholder="Username to add (e.g. john123)" required />
+      <div class="modal-actions">
+        <button id="submit-add-member-btn" class="btn-primary">Add Member</button>
+        <button id="close-add-member-btn" class="btn-secondary">Cancel</button>
       </div>
     </div>
   </div>
@@ -294,7 +311,8 @@
     let currentDisplayName = null;
     let isAdminUser = false;
     let isCurrentRoomManager = false;
-    let adminActiveMode = "admin"; // "admin" or "user"
+    let adminActiveMode = "admin";
+    let cachedRooms = [];
     let cooldownTimer = null;
 
     const loadingScreen = document.getElementById('loading-screen');
@@ -338,6 +356,13 @@
     const submitCreateRoomBtn = document.getElementById('submit-create-room-btn');
     const newRoomName = document.getElementById('new-room-name');
     const newRoomPass = document.getElementById('new-room-pass');
+    const newRoomPrivate = document.getElementById('new-room-private');
+
+    const addMemberModal = document.getElementById('add-member-modal');
+    const addMemberTargetRoom = document.getElementById('add-member-target-room');
+    const addMemberUsername = document.getElementById('add-member-username');
+    const submitAddMemberBtn = document.getElementById('submit-add-member-btn');
+    const closeAddMemberBtn = document.getElementById('close-add-member-btn');
 
     const feedbackWidget = document.getElementById('feedback-widget');
     const feedbackHeader = document.getElementById('feedback-header');
@@ -524,7 +549,7 @@
       });
     }
 
-    // Admin Top Right Mode Toggle
+    // Admin Mode Toggle
     adminModeToggle.addEventListener('click', () => {
       adminActiveMode = (adminActiveMode === "admin") ? "user" : "admin";
       updateAdminModeUI();
@@ -555,23 +580,47 @@
       location.reload();
     });
 
-    // Room Creation
+    // Room Creation & Adding Members
     openCreateRoomBtn.addEventListener('click', () => { createRoomModal.style.display = 'flex'; });
     closeCreateRoomBtn.addEventListener('click', () => { createRoomModal.style.display = 'none'; });
 
     submitCreateRoomBtn.addEventListener('click', () => {
       const roomName = newRoomName.value.trim();
       const roomPassword = newRoomPass.value.trim();
+      const isPrivate = newRoomPrivate.checked;
 
       if (!roomName) return alert('Enter a room name.');
 
-      socket.emit('create room', { roomName, roomPassword }, (res) => {
+      socket.emit('create room', { roomName, roomPassword, isPrivate }, (res) => {
         alert(res.message);
         if (res.success) {
           createRoomModal.style.display = 'none';
           newRoomName.value = '';
           newRoomPass.value = '';
+          newRoomPrivate.checked = false;
           joinGroup(roomName, roomPassword);
+        }
+      });
+    });
+
+    window.openAddMemberModal = function(roomName) {
+      addMemberTargetRoom.value = roomName;
+      addMemberModal.style.display = 'flex';
+    };
+
+    closeAddMemberBtn.addEventListener('click', () => { addMemberModal.style.display = 'none'; });
+
+    submitAddMemberBtn.addEventListener('click', () => {
+      const roomName = addMemberTargetRoom.value;
+      const targetUsername = addMemberUsername.value.trim();
+
+      if (!targetUsername) return alert('Enter a username.');
+
+      socket.emit('add member to room', { roomName, targetUsername }, (res) => {
+        alert(res.message);
+        if (res.success) {
+          addMemberModal.style.display = 'none';
+          addMemberUsername.value = '';
         }
       });
     });
@@ -743,7 +792,7 @@
         div.style.borderBottom = '1px solid #eee';
         div.style.fontSize = '12px';
         div.style.display = 'flex';
-        div.style.justifySpaceBetween = 'space-between';
+        div.style.justifyContent = 'space-between';
         div.style.alignItems = 'center';
 
         div.innerHTML = `
@@ -787,22 +836,33 @@
     });
 
     function renderRoomList(rooms) {
+      cachedRooms = rooms;
       roomListEl.innerHTML = '';
+
       rooms.forEach((room) => {
         const li = document.createElement('li');
         li.classList.add('room-item');
-        if (room.name === activeRoom) li.classList.add('active');
-
-        let label = room.name === "International Talk" 
-          ? `<b>International Talk</b>` 
-          : `# ${escapeHtml(room.name)}`;
-
-        let deleteBtn = '';
-        if (room.name !== "International Talk" && (isAdminUser || room.isManager)) {
-          deleteBtn = `<span class="msg-action" style="color:#d9534f; font-size:11px;" onclick="event.stopPropagation(); deleteGroup('${room.name}')">🗑️ Delete</span>`;
+        
+        // Dynamically turn ONLY the currently active group green
+        if (room.name === activeRoom) {
+          li.classList.add('active');
         }
 
-        li.innerHTML = `<span>${label}</span> ${deleteBtn}`;
+        const isManager = isAdminUser || room.owner === currentUser || (room.isManager);
+
+        let label = room.name === "International Talk" 
+          ? `<span><b>International Talk</b></span>` 
+          : `<span># ${escapeHtml(room.name)}${room.isPrivate ? ' 🔒' : ''}</span>`;
+
+        let actionBtns = '';
+        if (isManager) {
+          actionBtns += `<span class="msg-action" style="color:#0288d1; font-size:11px; margin-right:6px;" onclick="event.stopPropagation(); openAddMemberModal('${room.name}')">👥 Add</span>`;
+        }
+        if (room.name !== "International Talk" && isManager) {
+          actionBtns += `<span class="msg-action" style="color:#d9534f; font-size:11px;" onclick="event.stopPropagation(); deleteGroup('${room.name}')">🗑️ Delete</span>`;
+        }
+
+        li.innerHTML = `${label} <div>${actionBtns}</div>`;
         li.addEventListener('click', () => joinGroup(room.name));
         roomListEl.appendChild(li);
       });
@@ -827,6 +887,8 @@
           headerRoomTitle.textContent = roomName;
           messageInput.disabled = false;
           sendBtn.disabled = false;
+
+          renderRoomList(cachedRooms); // Refresh room list to make current group green
 
           if (res.history) {
             res.history.forEach(msg => renderSingleMessage(msg));
