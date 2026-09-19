@@ -36,7 +36,7 @@ if (MONGODB_URI) {
   console.warn('WARNING: MONGODB_URI variable missing. Server operating in memory.');
 }
 
-// Database Schemas (Age is omitted from persistent storage)
+// Database Schemas
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true, lowercase: true },
   displayName: { type: String, required: true },
@@ -46,6 +46,13 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true },
   verified: { type: Boolean, default: true },
   createdIp: { type: String, required: true }
+});
+
+const roomSchema = new mongoose.Schema({
+  name: { type: String, required: true, unique: true },
+  password: { type: String, default: null },
+  owner: { type: String, required: true },
+  managers: [{ type: String }]
 });
 
 const feedbackSchema = new mongoose.Schema({
@@ -72,6 +79,7 @@ const messageSchema = new mongoose.Schema({
 });
 
 const User = mongoose.model('User', userSchema);
+const Room = mongoose.model('Room', roomSchema);
 const Feedback = mongoose.model('Feedback', feedbackSchema);
 const Message = mongoose.model('Message', messageSchema);
 
@@ -87,8 +95,8 @@ const ADMIN_WHITELISTED_IPS = new Set([
   '::ffff:96.53.143.134'
 ]);
 
-// Auto-create Admin Account
-async function initAdmin() {
+// Auto-create Admin Account & Default Room in Database
+async function initDefaults() {
   if (mongoose.connection.readyState === 1) {
     const adminExists = await User.findOne({ username: ADMIN_USERNAME });
     if (!adminExists) {
@@ -102,19 +110,26 @@ async function initAdmin() {
         verified: true,
         createdIp: "127.0.0.1"
       });
-      console.log('Admin account created in MongoDB.');
+      console.log('Admin account initialized in database.');
+    }
+
+    const defaultRoom = await Room.findOne({ name: "International Talk" });
+    if (!defaultRoom) {
+      await Room.create({
+        name: "International Talk",
+        password: null,
+        owner: "System",
+        managers: [ADMIN_USERNAME]
+      });
+      console.log('International Talk room initialized in database.');
     }
   }
 }
-mongoose.connection.once('open', initAdmin);
+mongoose.connection.once('open', initDefaults);
 
 const pendingVerifications = {};
 const bannedUsers = new Set();
 const activeSockets = {};
-
-const rooms = {
-  "International Talk": { password: null, owner: "System", managers: ["admin"] }
-};
 
 app.get('/', (req, res) => {
   res.send('Easy Chat Backend Running');
@@ -128,13 +143,22 @@ function getClientIp(socket) {
   return socket.handshake.address;
 }
 
+// Strict Database Authenticator Helper
+async function authenticateUserStrict(username, password) {
+  if (mongoose.connection.readyState !== 1) return null;
+  const cleanUser = username.toLowerCase().trim();
+  const dbUser = await User.findOne({ username: cleanUser });
+  if (dbUser && dbUser.password === password) {
+    return dbUser;
+  }
+  return null;
+}
+
 io.on('connection', (socket) => {
 
-  // Step 1: Request Email Verification Code
+  // Verification Requests
   socket.on('request code', async ({ email }, callback) => {
-    if (!email) {
-      return callback({ success: false, message: 'Email address is required.' });
-    }
+    if (!email) return callback({ success: false, message: 'Email address is required.' });
 
     const clientIp = getClientIp(socket);
     const isAdminIp = ADMIN_WHITELISTED_IPS.has(clientIp);
@@ -142,10 +166,7 @@ io.on('connection', (socket) => {
     if (!isAdminIp && mongoose.connection.readyState === 1) {
       const existingAccount = await User.findOne({ createdIp: clientIp });
       if (existingAccount) {
-        return callback({ 
-          success: false, 
-          message: 'An account has already been registered from your IP network.' 
-        });
+        return callback({ success: false, message: 'An account has already been registered from your IP network.' });
       }
     }
 
@@ -159,7 +180,6 @@ io.on('connection', (socket) => {
     pendingVerifications[email] = { code, verified: false, lastSent: now };
 
     const resendApiKey = process.env.RESEND_API_KEY;
-
     if (!resendApiKey) {
       console.log(`\n--- Verification code for ${email}: ${code} ---\n`);
       return callback({ success: true, message: '[TEST MODE] Code generated! Check Render logs.' });
@@ -176,13 +196,7 @@ io.on('connection', (socket) => {
           from: 'Easy Chat <onboarding@resend.dev>',
           to: [email],
           subject: 'Your Easy Chat Verification Code',
-          html: `
-            <div style="font-family: Arial, sans-serif; padding: 20px;">
-              <h2 style="color: #075e54;">Easy Chat Verification</h2>
-              <p>Your verification code is:</p>
-              <h1 style="color: #25d366; letter-spacing: 4px;">${code}</h1>
-            </div>
-          `
+          html: `<h2 style="color: #075e54;">Verification Code: ${code}</h2>`
         })
       });
 
@@ -196,46 +210,29 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Step 2: Confirm Code
   socket.on('verify code', ({ email, code }, callback) => {
     const pending = pendingVerifications[email];
-
     if (!pending) return callback({ success: false, message: 'No verification request found for this email.' });
     if (pending.code !== code) return callback({ success: false, message: 'Invalid verification code.' });
 
     pending.verified = true;
-    callback({ success: true, message: 'Email verified! Please complete your registration form.' });
+    callback({ success: true, message: 'Email verified! Complete registration.' });
   });
 
-  // Step 3: Complete Registration (Age used ONLY for approval and immediately discarded)
   socket.on('complete registration', async ({ email, age, realName, displayName, username, password, bio }, callback) => {
     const pending = pendingVerifications[email];
+    if (!pending || !pending.verified) return callback({ success: false, message: 'Verify email first.' });
+    if (!age || !realName || !displayName || !username || !password) return callback({ success: false, message: 'All required fields must be filled.' });
 
-    if (!pending || !pending.verified) {
-      return callback({ success: false, message: 'Please verify your email code first.' });
-    }
-
-    if (!age || !realName || !displayName || !username || !password) {
-      return callback({ success: false, message: 'All required fields must be filled.' });
-    }
-
-    // Age Approval Gate (Minimum 13 years old)
     const parsedAge = parseInt(age, 10);
     if (isNaN(parsedAge) || parsedAge < 13) {
       delete pendingVerifications[email];
-      return callback({ success: false, message: 'Registration unapproved: You must be at least 13 years old to register.' });
+      return callback({ success: false, message: 'Registration rejected: Must be at least 13 years old.' });
     }
 
     const usernameRegex = /^[a-z0-9]+$/;
     if (!usernameRegex.test(username)) {
-      return callback({ 
-        success: false, 
-        message: 'Username must contain only lowercase letters and numbers (no spaces or special characters).' 
-      });
-    }
-
-    if (bannedUsers.has(username)) {
-      return callback({ success: false, message: 'This username is banned.' });
+      return callback({ success: false, message: 'Username must contain only lowercase letters and numbers.' });
     }
 
     const clientIp = getClientIp(socket);
@@ -244,17 +241,12 @@ io.on('connection', (socket) => {
     if (mongoose.connection.readyState === 1) {
       if (!isAdminIp) {
         const ipAccount = await User.findOne({ createdIp: clientIp });
-        if (ipAccount) {
-          return callback({ success: false, message: 'An account has already been registered from your IP network.' });
-        }
+        if (ipAccount) return callback({ success: false, message: 'An account already exists for your IP.' });
       }
 
       const existingUser = await User.findOne({ username });
-      if (existingUser) {
-        return callback({ success: false, message: 'Username is already taken.' });
-      }
+      if (existingUser) return callback({ success: false, message: 'Username is taken.' });
 
-      // Save user WITHOUT age field
       await User.create({
         username,
         displayName,
@@ -268,59 +260,233 @@ io.on('connection', (socket) => {
     }
 
     delete pendingVerifications[email];
-    callback({ success: true, message: 'Age approved! Account created successfully. You can now sign in.' });
+    callback({ success: true, message: 'Account created successfully! You can now sign in.' });
   });
 
-  // User Login
+  // Strict Login
   socket.on('login', async ({ username, password }, callback) => {
-    if (!username || !password) {
-      return callback({ success: false, message: 'Username and Password required.' });
-    }
+    if (!username || !password) return callback({ success: false, message: 'Username and Password required.' });
 
     const cleanUsername = username.toLowerCase().trim();
+    if (bannedUsers.has(cleanUsername)) return callback({ success: false, message: 'Account is banned.' });
 
-    if (bannedUsers.has(cleanUsername)) {
-      return callback({ success: false, message: 'Your account is banned.' });
-    }
+    const user = await authenticateUserStrict(cleanUsername, password);
+    if (!user) return callback({ success: false, message: 'Invalid credentials. User not found or password mismatch.' });
 
-    let user = null;
-    if (mongoose.connection.readyState === 1) {
-      user = await User.findOne({ username: cleanUsername });
-    }
-
-    if (cleanUsername === ADMIN_USERNAME) {
-      if (password !== ADMIN_PASS) return callback({ success: false, message: 'Incorrect Admin password.' });
-    } else if (!user) {
-      return callback({ success: false, message: 'User not found. Please register first.' });
-    } else if (user.password !== password) {
-      return callback({ success: false, message: 'Incorrect password.' });
-    }
-
-    socket.data.username = cleanUsername;
-    socket.data.displayName = user ? user.displayName : ADMIN_DISPLAY;
-    socket.data.isAdmin = (cleanUsername === ADMIN_USERNAME);
-    activeSockets[cleanUsername] = socket.id;
+    socket.data.username = user.username;
+    socket.data.displayName = user.displayName;
+    socket.data.isAdmin = (user.username === ADMIN_USERNAME);
+    activeSockets[user.username] = socket.id;
 
     let userFeedbackHistory = [];
+    let roomList = [];
+
     if (mongoose.connection.readyState === 1) {
-      userFeedbackHistory = await Feedback.find({ senderUsername: cleanUsername });
+      userFeedbackHistory = await Feedback.find({ senderUsername: user.username });
+      const dbRooms = await Room.find({});
+      roomList = dbRooms.map(r => ({
+        name: r.name,
+        hasPassword: !!r.password,
+        owner: r.owner,
+        isManager: socket.data.isAdmin || r.owner === user.username || (r.managers || []).includes(user.username)
+      }));
     }
 
-    callback({ 
-      success: true, 
-      rooms: Object.keys(rooms).map(name => ({ 
-        name, 
-        hasPassword: !!rooms[name].password, 
-        owner: rooms[name].owner,
-        isManager: (rooms[name].managers || []).includes(cleanUsername)
-      })), 
+    callback({
+      success: true,
+      rooms: roomList,
       isAdmin: socket.data.isAdmin,
       displayName: socket.data.displayName,
       userFeedbackHistory
     });
   });
 
-  // Feedback System (Real-time 2-Way Chat)
+  // Create Room
+  socket.on('create room', async ({ roomName, roomPassword }, callback) => {
+    const username = socket.data.username;
+    if (!username) return callback({ success: false, message: 'Unauthorized.' });
+
+    if (!roomName || roomName.trim().length === 0) {
+      return callback({ success: false, message: 'Room name is required.' });
+    }
+
+    const cleanRoomName = roomName.trim();
+
+    if (mongoose.connection.readyState === 1) {
+      const existing = await Room.findOne({ name: cleanRoomName });
+      if (existing) return callback({ success: false, message: 'A room with this name already exists.' });
+
+      await Room.create({
+        name: cleanRoomName,
+        password: roomPassword || null,
+        owner: username,
+        managers: [username]
+      });
+
+      const allRooms = await Room.find({});
+      const updatedList = allRooms.map(r => ({
+        name: r.name,
+        hasPassword: !!r.password,
+        owner: r.owner
+      }));
+
+      io.emit('room list updated', updatedList);
+    }
+
+    callback({ success: true, message: `Room "${cleanRoomName}" created successfully!` });
+  });
+
+  // Delete Room
+  socket.on('delete room', async ({ roomName }, callback) => {
+    const username = socket.data.username;
+    if (!username) return callback({ success: false, message: 'Unauthorized.' });
+
+    if (roomName === "International Talk") {
+      return callback({ success: false, message: 'The primary default room cannot be deleted.' });
+    }
+
+    if (mongoose.connection.readyState === 1) {
+      const room = await Room.findOne({ name: roomName });
+      if (!room) return callback({ success: false, message: 'Room not found.' });
+
+      const isAllowed = socket.data.isAdmin || room.owner === username || (room.managers || []).includes(username);
+      if (!isAllowed) return callback({ success: false, message: 'Permission denied.' });
+
+      await Room.deleteOne({ name: roomName });
+      await Message.deleteMany({ roomName });
+
+      const allRooms = await Room.find({});
+      const updatedList = allRooms.map(r => ({
+        name: r.name,
+        hasPassword: !!r.password,
+        owner: r.owner
+      }));
+
+      io.emit('room list updated', updatedList);
+      io.to(roomName).emit('room deleted redirect', { roomName });
+    }
+
+    callback({ success: true, message: `Room "${roomName}" has been deleted.` });
+  });
+
+  // Join Room (Fixed Double-Join Glitch)
+  socket.on('join room', async ({ roomName, roomPassword }, callback) => {
+    const username = socket.data.username;
+    const displayName = socket.data.displayName;
+
+    if (!username) return callback({ success: false, message: 'Must be logged in.' });
+
+    // Guard against re-joining the exact room currently active
+    if (socket.data.currentRoom === roomName) {
+      let currentHistory = [];
+      if (mongoose.connection.readyState === 1) {
+        currentHistory = await Message.find({ roomName }).sort({ timestamp: -1 }).limit(200);
+        currentHistory.reverse();
+      }
+      return callback({ success: true, history: currentHistory, rejoining: true });
+    }
+
+    if (mongoose.connection.readyState === 1) {
+      const room = await Room.findOne({ name: roomName });
+      if (!room) return callback({ success: false, message: 'Room does not exist.' });
+
+      if (room.password && room.password !== roomPassword && !socket.data.isAdmin && room.owner !== username) {
+        return callback({ success: false, message: 'Incorrect room password.' });
+      }
+
+      if (socket.data.currentRoom) {
+        const oldRoom = socket.data.currentRoom;
+        socket.leave(oldRoom);
+        const leaveMsg = { roomName: oldRoom, username: 'System', displayName: 'System', text: `${displayName} has left ${oldRoom}.`, system: true };
+        await Message.create(leaveMsg);
+        io.to(oldRoom).emit('chat message', leaveMsg);
+      }
+
+      socket.join(roomName);
+      socket.data.currentRoom = roomName;
+
+      const history = await Message.find({ roomName }).sort({ timestamp: -1 }).limit(200);
+      history.reverse();
+
+      const isManager = socket.data.isAdmin || room.owner === username || (room.managers || []).includes(username);
+
+      callback({ success: true, history, isManager });
+
+      const joinMsg = { roomName, username: 'System', displayName: 'System', text: `${displayName} joined ${roomName}.`, system: true };
+      await Message.create(joinMsg);
+      io.to(roomName).emit('chat message', joinMsg);
+    }
+  });
+
+  // Chat Messages
+  socket.on('chat message', async (msgText) => {
+    const room = socket.data.currentRoom;
+    const username = socket.data.username;
+    const displayName = socket.data.displayName;
+
+    if (!room || !username || bannedUsers.has(username)) return;
+
+    let msgData = { roomName: room, username, displayName, text: msgText, senderId: socket.id, system: false };
+    if (mongoose.connection.readyState === 1) {
+      const created = await Message.create(msgData);
+      msgData._id = created._id;
+    }
+    io.to(room).emit('chat message', msgData);
+  });
+
+  // Delete Single Message
+  socket.on('delete message for everyone', async ({ messageId }, callback) => {
+    const roomName = socket.data.currentRoom;
+    const username = socket.data.username;
+
+    if (mongoose.connection.readyState === 1) {
+      const room = await Room.findOne({ name: roomName });
+      const isManager = socket.data.isAdmin || (room && (room.owner === username || (room.managers || []).includes(username)));
+
+      if (!isManager) return callback({ success: false, message: 'Permission denied.' });
+
+      await Message.findByIdAndDelete(messageId);
+      io.to(roomName).emit('message deleted for everyone', { messageId });
+      callback({ success: true });
+    }
+  });
+
+  // Delete All Messages By User
+  socket.on('delete user messages in room', async ({ targetUsername }, callback) => {
+    const roomName = socket.data.currentRoom;
+    const username = socket.data.username;
+
+    if (mongoose.connection.readyState === 1) {
+      const room = await Room.findOne({ name: roomName });
+      const isManager = socket.data.isAdmin || (room && (room.owner === username || (room.managers || []).includes(username)));
+
+      if (!isManager) return callback({ success: false, message: 'Permission denied.' });
+
+      await Message.deleteMany({ roomName, username: targetUsername.toLowerCase() });
+      io.to(roomName).emit('user messages deleted', { targetUsername: targetUsername.toLowerCase() });
+      callback({ success: true });
+    }
+  });
+
+  // Admin Delete User Account
+  socket.on('admin delete user', async ({ targetUsername }, callback) => {
+    if (!socket.data.isAdmin) return callback({ success: false, message: 'Unauthorized.' });
+    if (targetUsername.toLowerCase() === ADMIN_USERNAME) return callback({ success: false, message: 'Admin account cannot be deleted.' });
+
+    if (mongoose.connection.readyState === 1) {
+      await User.deleteOne({ username: targetUsername.toLowerCase() });
+      await Message.deleteMany({ username: targetUsername.toLowerCase() });
+      await Feedback.deleteMany({ senderUsername: targetUsername.toLowerCase() });
+
+      const targetSocketId = activeSockets[targetUsername.toLowerCase()];
+      if (targetSocketId) {
+        io.to(targetSocketId).emit('force logout', 'Your account has been deleted by an administrator.');
+      }
+      callback({ success: true, message: `Account @${targetUsername} has been permanently deleted.` });
+    }
+  });
+
+  // Feedback Chat System
   socket.on('send admin message', async (msgText, callback) => {
     const username = socket.data.username;
     const displayName = socket.data.displayName;
@@ -345,7 +511,7 @@ io.on('connection', (socket) => {
       io.to(adminSocketId).emit('new feedback message', msgData);
     }
 
-    callback({ success: true, message: 'Feedback sent directly to Admin!', msgData });
+    callback({ success: true, message: 'Message sent to Admin!', msgData });
   });
 
   socket.on('reply feedback thread', async ({ feedbackId, text }, callback) => {
@@ -381,95 +547,6 @@ io.on('connection', (socket) => {
     callback({ success: true, updatedFeedback });
   });
 
-  // Chat Room Actions & Message Deletions
-  socket.on('join room', async ({ roomName }, callback) => {
-    const username = socket.data.username;
-    const displayName = socket.data.displayName;
-
-    if (!username) return callback({ success: false, message: 'Must be logged in.' });
-
-    const room = rooms[roomName];
-    if (!room) return callback({ success: false, message: 'Group does not exist.' });
-
-    if (socket.data.currentRoom) {
-      const oldRoom = socket.data.currentRoom;
-      socket.leave(oldRoom);
-      const leaveMsg = { roomName: oldRoom, username: 'System', displayName: 'System', text: `${displayName} has left ${oldRoom}.`, system: true };
-      if (mongoose.connection.readyState === 1) await Message.create(leaveMsg);
-      io.to(oldRoom).emit('chat message', leaveMsg);
-    }
-
-    socket.join(roomName);
-    socket.data.currentRoom = roomName;
-
-    let history = [];
-    if (mongoose.connection.readyState === 1) {
-      history = await Message.find({ roomName }).sort({ timestamp: -1 }).limit(200);
-      history.reverse();
-    }
-
-    callback({ 
-      success: true, 
-      history,
-      isManager: socket.data.isAdmin || (room.managers || []).includes(username)
-    });
-
-    const joinMsg = { roomName, username: 'System', displayName: 'System', text: `${displayName} joined ${roomName}.`, system: true };
-    if (mongoose.connection.readyState === 1) await Message.create(joinMsg);
-    io.to(roomName).emit('chat message', joinMsg);
-  });
-
-  socket.on('chat message', async (msgText) => {
-    const room = socket.data.currentRoom;
-    const username = socket.data.username;
-    const displayName = socket.data.displayName;
-
-    if (!room || !username || bannedUsers.has(username)) return;
-
-    let msgData = { roomName: room, username, displayName, text: msgText, senderId: socket.id, system: false };
-    if (mongoose.connection.readyState === 1) {
-      const created = await Message.create(msgData);
-      msgData._id = created._id;
-    }
-    io.to(room).emit('chat message', msgData);
-  });
-
-  // Delete Single Message for Everyone
-  socket.on('delete message for everyone', async ({ messageId }, callback) => {
-    const roomName = socket.data.currentRoom;
-    const username = socket.data.username;
-    const room = rooms[roomName];
-
-    const isManager = socket.data.isAdmin || (room && (room.managers || []).includes(username));
-
-    if (!isManager) return callback({ success: false, message: 'Permission denied.' });
-
-    if (mongoose.connection.readyState === 1) {
-      await Message.findByIdAndDelete(messageId);
-    }
-
-    io.to(roomName).emit('message deleted for everyone', { messageId });
-    callback({ success: true });
-  });
-
-  // Delete All Messages from a Specific User in Current Room
-  socket.on('delete user messages in room', async ({ targetUsername }, callback) => {
-    const roomName = socket.data.currentRoom;
-    const username = socket.data.username;
-    const room = rooms[roomName];
-
-    const isManager = socket.data.isAdmin || (room && (room.managers || []).includes(username));
-
-    if (!isManager) return callback({ success: false, message: 'Permission denied.' });
-
-    if (mongoose.connection.readyState === 1) {
-      await Message.deleteMany({ roomName, username: targetUsername.toLowerCase() });
-    }
-
-    io.to(roomName).emit('user messages deleted', { targetUsername: targetUsername.toLowerCase() });
-    callback({ success: true });
-  });
-
   // Admin Data & Bulk Upload
   socket.on('admin get data', async (callback) => {
     if (!socket.data.isAdmin) return callback({ success: false });
@@ -492,7 +569,6 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Bulk Upload Accounts Following 3-Line Pattern
   socket.on('admin bulk upload accounts', async ({ rawText }, callback) => {
     if (!socket.data.isAdmin) return callback({ success: false, message: 'Unauthorized' });
 
