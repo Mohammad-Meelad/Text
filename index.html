@@ -13,12 +13,12 @@
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
     .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.5); display: flex; justify-content: center; align-items: center; z-index: 100; }
-    .modal-box { background: white; padding: 25px; border-radius: 12px; width: 350px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.2); animation: popIn 0.25s ease; }
+    .modal-box { background: white; padding: 25px; border-radius: 12px; width: 380px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.2); animation: popIn 0.25s ease; max-height: 90vh; overflow-y: auto; }
     @keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
     .modal-box h3 { margin: 0 0 5px 0; color: #075e54; text-align: center; }
-    .modal-box input, .modal-box textarea { padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; outline: none; }
-    .input-hint { font-size: 11px; color: #666; margin-top: -8px; }
+    .modal-box input, .modal-box textarea { padding: 9px; border: 1px solid #ccc; border-radius: 6px; font-size: 13px; outline: none; }
+    .input-hint { font-size: 11px; color: #666; margin-top: -6px; }
     
     .modal-actions { display: flex; gap: 10px; margin-top: 5px; }
     .btn-primary { flex: 1; padding: 10px; background-color: #25d366; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
@@ -124,19 +124,33 @@
 
     <form id="register-box" class="modal-box" style="display: none;" onsubmit="return false;">
       <h3>Create Easy Chat Account</h3>
-      <input id="reg-username" type="text" placeholder="Username (lowercase & numbers only)" autocomplete="username" required />
-      <div class="input-hint">Example: meelad123 (no spaces or capital letters)</div>
-      <input id="reg-displayname" type="text" placeholder="Display Name (Your Name)" required />
-      <input id="reg-email" type="email" placeholder="Email Address" autocomplete="email" required />
-      <input id="reg-password" type="password" placeholder="Password" autocomplete="new-password" required />
+      
+      <!-- Step 1: Request Code -->
+      <div id="email-step" style="display: flex; flex-direction: column; gap: 8px;">
+        <input id="reg-email" type="email" placeholder="Email Address" autocomplete="email" required />
+        <button id="send-code-btn" type="button" class="btn-primary">Send Verification Code</button>
+      </div>
+
+      <!-- Step 2: Verify Code -->
+      <div id="code-step" style="display: none; flex-direction: column; gap: 8px;">
+        <input id="reg-code" type="text" placeholder="6-Digit Verification Code" />
+        <button id="verify-code-btn" type="button" class="btn-primary">Verify Code</button>
+      </div>
+
+      <!-- Step 3: Registration Form (Unlocked after verification) -->
+      <div id="details-step" style="display: none; flex-direction: column; gap: 8px;">
+        <input id="reg-age" type="number" min="1" max="120" placeholder="Age (e.g. 18)" required />
+        <input id="reg-realname" type="text" placeholder="Real Name (Full Name)" required />
+        <input id="reg-displayname" type="text" placeholder="Display Name (Chat Name)" required />
+        <input id="reg-username" type="text" placeholder="Username (lowercase & numbers only)" autocomplete="username" required />
+        <div class="input-hint">Only lowercase letters & numbers allowed (e.g. meelad123)</div>
+        <textarea id="reg-bio" rows="2" placeholder="Comments / Bio (Optional)"></textarea>
+        <input id="reg-password" type="password" placeholder="Password" autocomplete="new-password" required />
+        <button id="complete-reg-btn" type="button" class="btn-primary">Create Account</button>
+      </div>
+
       <div id="reg-error" class="modal-error"></div>
       <div id="reg-success" class="modal-success"></div>
-      <button id="send-code-btn" type="button" class="btn-primary">Send Verification Code</button>
-
-      <div id="code-step" style="display: none; flex-direction: column; gap: 8px; margin-top: 5px;">
-        <input id="reg-code" type="text" placeholder="6-Digit Verification Code" />
-        <button id="verify-code-btn" type="button" class="btn-primary">Verify Code & Complete</button>
-      </div>
 
       <div class="toggle-auth" id="show-login-btn">Already have an account? Sign In</div>
     </form>
@@ -230,14 +244,23 @@
     const showRegisterBtn = document.getElementById('show-register-btn');
     const showLoginBtn = document.getElementById('show-login-btn');
 
-    const regUsername = document.getElementById('reg-username');
-    const regDisplayName = document.getElementById('reg-displayname');
+    const emailStep = document.getElementById('email-step');
+    const codeStep = document.getElementById('code-step');
+    const detailsStep = document.getElementById('details-step');
+
     const regEmail = document.getElementById('reg-email');
-    const regPassword = document.getElementById('reg-password');
     const regCode = document.getElementById('reg-code');
+    const regAge = document.getElementById('reg-age');
+    const regRealName = document.getElementById('reg-realname');
+    const regDisplayName = document.getElementById('reg-displayname');
+    const regUsername = document.getElementById('reg-username');
+    const regBio = document.getElementById('reg-bio');
+    const regPassword = document.getElementById('reg-password');
+
     const sendCodeBtn = document.getElementById('send-code-btn');
     const verifyCodeBtn = document.getElementById('verify-code-btn');
-    const codeStep = document.getElementById('code-step');
+    const completeRegBtn = document.getElementById('complete-reg-btn');
+
     const regError = document.getElementById('reg-error');
     const regSuccess = document.getElementById('reg-success');
 
@@ -274,7 +297,7 @@
     const messageInput = document.getElementById('message-input');
     const sendBtn = document.getElementById('send-btn');
 
-    // Auto-login from localStorage cache
+    // Auto-login from localStorage
     socket.on('connect', () => {
       loadingScreen.style.display = 'none';
 
@@ -305,16 +328,13 @@
       e.target.value = e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '');
     });
 
+    // Step 1: Send Code
     sendCodeBtn.addEventListener('click', () => {
-      const username = regUsername.value.trim();
-      const displayName = regDisplayName.value.trim();
       const email = regEmail.value.trim();
-      const password = regPassword.value.trim();
-
       regError.style.display = 'none';
       regSuccess.style.display = 'none';
 
-      socket.emit('request code', { username, displayName, email, password }, (res) => {
+      socket.emit('request code', { email }, (res) => {
         if (res.success) {
           regSuccess.textContent = res.message;
           regSuccess.style.display = 'block';
@@ -345,16 +365,45 @@
       }, 1000);
     }
 
+    // Step 2: Verify Code
     verifyCodeBtn.addEventListener('click', () => {
       const email = regEmail.value.trim();
       const code = regCode.value.trim();
 
       socket.emit('verify code', { email, code }, (res) => {
         if (res.success) {
+          regSuccess.textContent = res.message;
+          regSuccess.style.display = 'block';
+          regError.style.display = 'none';
+          emailStep.style.display = 'none';
+          codeStep.style.display = 'none';
+          detailsStep.style.display = 'flex';
+        } else {
+          regError.textContent = res.message;
+          regError.style.display = 'block';
+        }
+      });
+    });
+
+    // Step 3: Complete Account Registration
+    completeRegBtn.addEventListener('click', () => {
+      const email = regEmail.value.trim();
+      const age = regAge.value.trim();
+      const realName = regRealName.value.trim();
+      const displayName = regDisplayName.value.trim();
+      const username = regUsername.value.trim();
+      const bio = regBio.value.trim();
+      const password = regPassword.value.trim();
+
+      regError.style.display = 'none';
+      regSuccess.style.display = 'none';
+
+      socket.emit('complete registration', { email, age, realName, displayName, username, password, bio }, (res) => {
+        if (res.success) {
           alert(res.message);
           registerBox.style.display = 'none';
           loginBox.style.display = 'flex';
-          loginUsername.value = regUsername.value.trim();
+          loginUsername.value = username;
         } else {
           regError.textContent = res.message;
           regError.style.display = 'block';
