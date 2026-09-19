@@ -76,7 +76,7 @@
     <!-- Sign In View -->
     <form id="login-box" class="modal-box" onsubmit="return false;">
       <h3>Easy Chat Sign In</h3>
-      <input id="login-username" type="text" placeholder="Username (e.g. john123)" autocomplete="username" required />
+      <input id="login-username" type="text" placeholder="Username (e.g. admin)" autocomplete="username" required />
       <input id="login-password" type="password" placeholder="Password" autocomplete="current-password" required />
       <div id="login-error" class="modal-error"></div>
       <button id="login-btn" type="submit" class="btn-primary">Sign In</button>
@@ -108,8 +108,8 @@
   <div id="contact-admin-modal" class="modal-overlay" style="display: none;">
     <div class="modal-box">
       <h3>💬 Chat to Admin</h3>
-      <p style="font-size: 12px; color: #555; margin: 0;">Send a direct feedback message or report an issue to Meelad Mohammad.</p>
-      <textarea id="admin-message-input" rows="4" placeholder="Type your message or feedback here..."></textarea>
+      <p style="font-size: 12px; color: #555; margin: 0;">Send a direct message or report an issue to Meelad Mohammad.</p>
+      <textarea id="admin-message-input" rows="4" placeholder="Type your message here..."></textarea>
       <div id="contact-admin-msg" class="modal-success"></div>
       <div class="modal-actions">
         <button id="send-admin-msg-btn" class="btn-primary">Send Message</button>
@@ -167,7 +167,6 @@
     let currentDisplayName = null;
     let cooldownTimer = null;
 
-    // UI References
     const loadingScreen = document.getElementById('loading-screen');
     const authModal = document.getElementById('auth-modal');
     const loginBox = document.getElementById('login-box');
@@ -219,7 +218,6 @@
       if (!currentUser) authModal.style.display = 'flex';
     });
 
-    // Toggle Sign In / Register Forms
     showRegisterBtn.addEventListener('click', () => {
       loginBox.style.display = 'none';
       registerBox.style.display = 'flex';
@@ -230,12 +228,10 @@
       loginBox.style.display = 'flex';
     });
 
-    // Enforce lowercase typing on registration username
     regUsername.addEventListener('input', (e) => {
       e.target.value = e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '');
     });
 
-    // Request Email Verification Code
     sendCodeBtn.addEventListener('click', () => {
       const username = regUsername.value.trim();
       const displayName = regDisplayName.value.trim();
@@ -276,7 +272,6 @@
       }, 1000);
     }
 
-    // Verify Code
     verifyCodeBtn.addEventListener('click', () => {
       const email = regEmail.value.trim();
       const code = regCode.value.trim();
@@ -294,7 +289,6 @@
       });
     });
 
-    // Sign In Action
     loginBox.addEventListener('submit', () => {
       const username = loginUsername.value.trim();
       const password = loginPassword.value.trim();
@@ -321,7 +315,6 @@
       });
     });
 
-    // Direct Feedback/Message to Admin Handlers
     openContactAdminBtn.addEventListener('click', () => {
       adminMessageInput.value = '';
       contactAdminMsg.style.display = 'none';
@@ -347,7 +340,6 @@
       });
     });
 
-    // Settings Modal Handlers
     openSettingsBtn.addEventListener('click', () => {
       settingsModal.style.display = 'flex';
     });
