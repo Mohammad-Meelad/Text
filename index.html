@@ -13,7 +13,7 @@
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
     .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.5); display: flex; justify-content: center; align-items: center; z-index: 100; }
-    .modal-box { background: white; padding: 25px; border-radius: 12px; width: 380px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.2); animation: popIn 0.25s ease; max-height: 90vh; overflow-y: auto; }
+    .modal-box { background: white; padding: 25px; border-radius: 12px; width: 420px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.2); animation: popIn 0.25s ease; max-height: 90vh; overflow-y: auto; }
     @keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
     .modal-box h3 { margin: 0 0 5px 0; color: #075e54; text-align: center; }
@@ -25,6 +25,7 @@
     .btn-primary:disabled { background-color: #a8e6cf; cursor: not-allowed; }
     .btn-primary:hover:not(:disabled) { background-color: #1ebc57; }
     .btn-secondary { flex: 1; padding: 10px; background-color: #888; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+    .btn-danger { background-color: #d9534f; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; }
     
     .modal-error { color: red; font-size: 12px; text-align: center; display: none; }
     .modal-success { color: green; font-size: 12px; text-align: center; display: none; }
@@ -36,7 +37,7 @@
       position: fixed;
       bottom: 20px;
       right: 20px;
-      width: 320px;
+      width: 340px;
       background: white;
       border-radius: 12px 12px 0 0;
       box-shadow: 0 4px 16px rgba(0,0,0,0.2);
@@ -61,7 +62,7 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
-      max-height: 300px;
+      max-height: 320px;
       overflow-y: auto;
       background: #ffffff;
     }
@@ -81,19 +82,23 @@
     .room-item.active { background-color: #d9fdd3; font-weight: bold; }
 
     #chat-panel { flex: 1; display: flex; flex-direction: column; background-color: #e5ddd5; }
-    #chat-header { background-color: #f0f2f5; padding: 15px; border-bottom: 1px solid #e0e0e0; display: flex; flex-direction: column; gap: 3px; }
+    #chat-header { background-color: #f0f2f5; padding: 12px 15px; border-bottom: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center; }
     #header-room-title { font-weight: bold; font-size: 16px; }
     #chat-box { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
 
-    .message-wrapper { display: flex; flex-direction: column; max-width: 70%; }
+    .message-wrapper { display: flex; flex-direction: column; max-width: 70%; position: relative; }
     .message-wrapper.sent { align-self: flex-end; }
     .message-wrapper.received { align-self: flex-start; }
     .message-wrapper.system { align-self: center; max-width: 90%; }
     .sender-name { font-size: 11px; color: #666; margin-bottom: 2px; margin-left: 4px; font-weight: 600; }
-    .message-bubble { padding: 8px 12px; border-radius: 8px; font-size: 14px; line-height: 1.4; word-wrap: break-word; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
+    .message-bubble { padding: 8px 12px; border-radius: 8px; font-size: 14px; line-height: 1.4; word-wrap: break-word; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; }
     .sent .message-bubble { background-color: #dcf8c6; border-top-right-radius: 0; }
     .received .message-bubble { background-color: #ffffff; border-top-left-radius: 0; }
     .system .message-bubble { background-color: rgba(225, 245, 254, 0.9); color: #555; font-size: 12px; border-radius: 12px; padding: 4px 12px; }
+
+    .msg-controls { font-size: 10px; color: #888; display: flex; gap: 8px; margin-top: 3px; justify-content: flex-end; }
+    .msg-action { cursor: pointer; text-decoration: underline; }
+    .msg-action:hover { color: #d9534f; }
 
     #message-form { display: flex; padding: 10px; background-color: #f0f0f0; gap: 10px; }
     #message-input { flex: 1; padding: 10px 15px; border: none; border-radius: 20px; font-size: 14px; outline: none; }
@@ -101,6 +106,10 @@
 
     .feedback-item { background: #f9f9f9; padding: 10px; border-radius: 6px; border-left: 3px solid #075e54; margin-bottom: 10px; font-size: 12px; }
     .feedback-reply { background: #e1f5fe; padding: 6px 8px; border-radius: 4px; margin-top: 6px; border-left: 2px solid #0288d1; font-size: 11px; }
+
+    .tab-bar { display: flex; gap: 5px; border-bottom: 1px solid #ddd; margin-bottom: 10px; }
+    .tab-btn { flex: 1; padding: 8px; border: none; background: #eee; cursor: pointer; font-size: 12px; font-weight: bold; }
+    .tab-btn.active { background: #075e54; color: white; }
   </style>
 </head>
 <body>
@@ -137,9 +146,10 @@
         <button id="verify-code-btn" type="button" class="btn-primary">Verify Code</button>
       </div>
 
-      <!-- Step 3: Registration Form (Unlocked after verification) -->
+      <!-- Step 3: Registration Form (Age strictly used for approval gate) -->
       <div id="details-step" style="display: none; flex-direction: column; gap: 8px;">
-        <input id="reg-age" type="number" min="1" max="120" placeholder="Age (e.g. 18)" required />
+        <input id="reg-age" type="number" min="1" max="120" placeholder="Age (Used for approval only)" required />
+        <div class="input-hint">Age is collected strictly for approval and will NOT be stored.</div>
         <input id="reg-realname" type="text" placeholder="Real Name (Full Name)" required />
         <input id="reg-displayname" type="text" placeholder="Display Name (Chat Name)" required />
         <input id="reg-username" type="text" placeholder="Username (lowercase & numbers only)" autocomplete="username" required />
@@ -159,40 +169,56 @@
   <!-- Collapsible Bottom-Right Feedback Widget -->
   <div id="feedback-widget" class="collapsed">
     <div id="feedback-header">
-      <span>💬 Help & Feedback</span>
+      <span>💬 Support & Admin Chat</span>
       <span id="feedback-toggle-icon">▲</span>
     </div>
     <div id="feedback-body">
       <div id="user-feedback-history"></div>
-      <textarea id="widget-feedback-text" rows="3" placeholder="Describe your issue or feedback..." style="width: 100%; border: 1px solid #ccc; border-radius: 6px; padding: 8px; font-size: 13px; outline: none;"></textarea>
+      <textarea id="widget-feedback-text" rows="3" placeholder="Describe your issue or chat with Admin..." style="width: 100%; border: 1px solid #ccc; border-radius: 6px; padding: 8px; font-size: 13px; outline: none;"></textarea>
       <div id="widget-feedback-status" class="modal-success"></div>
-      <button id="widget-feedback-send-btn" class="btn-primary" style="padding: 8px;">Send to Admin</button>
+      <button id="widget-feedback-send-btn" class="btn-primary" style="padding: 8px;">Send Message</button>
     </div>
   </div>
 
-  <!-- Admin Inbox Modal -->
+  <!-- Admin Control Panel Modal -->
   <div id="admin-modal" class="modal-overlay" style="display: none;">
-    <div class="modal-box" style="width: 500px; max-height: 80vh;">
-      <h3>🛡️ Admin Control & Feedback Inbox</h3>
+    <div class="modal-box" style="width: 550px; max-height: 85vh;">
+      <h3>🛡️ Admin Control Panel</h3>
       
-      <div style="border: 1px solid #ddd; padding: 10px; border-radius: 6px; max-height: 350px; overflow-y: auto;">
-        <h4 style="margin: 0 0 8px 0; color: #075e54; font-size: 13px;">Received User Feedback & Issues</h4>
-        <div id="admin-inbox-list"></div>
+      <div class="tab-bar">
+        <button class="tab-btn active" id="tab-btn-inbox">Feedback Inbox</button>
+        <button class="tab-btn" id="tab-btn-users">Account Manager</button>
+        <button class="tab-btn" id="tab-btn-bulk">Bulk Import</button>
+      </div>
+
+      <!-- Tab 1: Inbox -->
+      <div id="tab-content-inbox" style="display: block;">
+        <div style="border: 1px solid #ddd; padding: 10px; border-radius: 6px; max-height: 350px; overflow-y: auto;">
+          <div id="admin-inbox-list"></div>
+        </div>
+      </div>
+
+      <!-- Tab 2: Users -->
+      <div id="tab-content-users" style="display: none;">
+        <div style="border: 1px solid #ddd; padding: 10px; border-radius: 6px; max-height: 350px; overflow-y: auto;">
+          <div id="admin-user-list"></div>
+        </div>
+      </div>
+
+      <!-- Tab 3: Bulk Upload -->
+      <div id="tab-content-bulk" style="display: none; flex-direction: column; gap: 8px;">
+        <div style="font-size: 11px; color: #555;">
+          Paste user details using your repeating 3-line pattern:<br>
+          <b>Line 1:</b> Display Name<br>
+          <b>Line 2:</b> Username<br>
+          <b>Line 3:</b> Password
+        </div>
+        <textarea id="bulk-upload-text" rows="10" placeholder="Meelad Mohammad&#10;meelad123&#10;pass123&#10;John Doe&#10;john123&#10;pass123"></textarea>
+        <button id="bulk-upload-submit-btn" class="btn-primary">Import Bulk Accounts</button>
       </div>
 
       <div class="modal-actions">
         <button id="close-admin-modal-btn" class="btn-secondary">Close</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Settings Modal Placeholder -->
-  <div id="settings-modal" class="modal-overlay" style="display: none;">
-    <div class="modal-box">
-      <h3>⚙️ Settings</h3>
-      <p style="font-size: 13px; color: #666; text-align: center; margin: 20px 0;">Settings options will be added here soon.</p>
-      <div class="modal-actions">
-        <button id="close-settings-btn" class="btn-secondary">Close</button>
       </div>
     </div>
   </div>
@@ -205,8 +231,7 @@
       </div>
 
       <div class="action-bar">
-        <button id="open-settings-btn" class="action-btn">⚙️ Settings</button>
-        <button id="admin-panel-btn" class="action-btn admin">🛡️ Inbox</button>
+        <button id="admin-panel-btn" class="action-btn admin">🛡️ Control Panel</button>
         <button id="logout-btn" class="action-btn logout">Sign Out</button>
       </div>
 
@@ -234,6 +259,7 @@
     let currentUser = null;
     let currentDisplayName = null;
     let isAdminUser = false;
+    let isCurrentRoomManager = false;
     let cooldownTimer = null;
 
     const loadingScreen = document.getElementById('loading-screen');
@@ -281,12 +307,18 @@
     const adminPanelBtn = document.getElementById('admin-panel-btn');
     const closeAdminModalBtn = document.getElementById('close-admin-modal-btn');
     const adminInboxList = document.getElementById('admin-inbox-list');
+    const adminUserList = document.getElementById('admin-user-list');
 
-    const settingsModal = document.getElementById('settings-modal');
-    const openSettingsBtn = document.getElementById('open-settings-btn');
-    const closeSettingsBtn = document.getElementById('close-settings-btn');
+    const tabBtnInbox = document.getElementById('tab-btn-inbox');
+    const tabBtnUsers = document.getElementById('tab-btn-users');
+    const tabBtnBulk = document.getElementById('tab-btn-bulk');
+    const tabContentInbox = document.getElementById('tab-content-inbox');
+    const tabContentUsers = document.getElementById('tab-content-users');
+    const tabContentBulk = document.getElementById('tab-content-bulk');
+    const bulkUploadText = document.getElementById('bulk-upload-text');
+    const bulkUploadSubmitBtn = document.getElementById('bulk-upload-submit-btn');
+
     const logoutBtn = document.getElementById('logout-btn');
-
     const appContainer = document.getElementById('app-container');
     const roomListEl = document.getElementById('room-list');
     const userDisplay = document.getElementById('user-display');
@@ -297,7 +329,7 @@
     const messageInput = document.getElementById('message-input');
     const sendBtn = document.getElementById('send-btn');
 
-    // Auto-login from localStorage
+    // Auto-login
     socket.on('connect', () => {
       loadingScreen.style.display = 'none';
 
@@ -328,7 +360,6 @@
       e.target.value = e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '');
     });
 
-    // Step 1: Send Code
     sendCodeBtn.addEventListener('click', () => {
       const email = regEmail.value.trim();
       regError.style.display = 'none';
@@ -365,7 +396,6 @@
       }, 1000);
     }
 
-    // Step 2: Verify Code
     verifyCodeBtn.addEventListener('click', () => {
       const email = regEmail.value.trim();
       const code = regCode.value.trim();
@@ -385,7 +415,6 @@
       });
     });
 
-    // Step 3: Complete Account Registration
     completeRegBtn.addEventListener('click', () => {
       const email = regEmail.value.trim();
       const age = regAge.value.trim();
@@ -455,6 +484,7 @@
       location.reload();
     });
 
+    // Feedback System Widget Controls
     feedbackHeader.addEventListener('click', () => {
       feedbackWidget.classList.toggle('collapsed');
       feedbackToggleIcon.textContent = feedbackWidget.classList.contains('collapsed') ? '▲' : '▼';
@@ -470,9 +500,7 @@
           widgetFeedbackStatus.style.display = 'block';
           widgetFeedbackText.value = '';
           appendUserFeedbackItem(res.msgData);
-          setTimeout(() => {
-            widgetFeedbackStatus.style.display = 'none';
-          }, 2000);
+          setTimeout(() => { widgetFeedbackStatus.style.display = 'none'; }, 2000);
         }
       });
     });
@@ -483,33 +511,61 @@
     }
 
     function appendUserFeedbackItem(msg) {
-      const div = document.createElement('div');
-      div.classList.add('feedback-item');
-      div.id = `user-fb-${msg.id || msg._id}`;
-      let replyHtml = msg.reply 
-        ? `<div class="feedback-reply"><b>Admin Reply:</b> ${escapeHtml(msg.reply.text)}</div>` 
-        : '';
-      div.innerHTML = `
+      const msgId = msg.id || msg._id;
+      let existing = document.getElementById(`user-fb-${msgId}`);
+      if (!existing) {
+        existing = document.createElement('div');
+        existing.classList.add('feedback-item');
+        existing.id = `user-fb-${msgId}`;
+        userFeedbackHistory.appendChild(existing);
+      }
+
+      let repliesHtml = '';
+      if (msg.replies && msg.replies.length > 0) {
+        repliesHtml = msg.replies.map(r => `
+          <div class="feedback-reply"><b>${escapeHtml(r.senderDisplayName)}:</b> ${escapeHtml(r.text)}</div>
+        `).join('');
+      }
+
+      existing.innerHTML = `
         <div><b>You:</b> ${escapeHtml(msg.text)}</div>
-        ${replyHtml}
+        ${repliesHtml}
+        <div style="display:flex; gap:5px; margin-top:6px;">
+          <input type="text" id="user-reply-input-${msgId}" placeholder="Reply..." style="flex:1; padding:4px; font-size:11px;" />
+          <button class="btn-primary" style="padding:4px 8px; font-size:11px;" onclick="userReplyToThread('${msgId}')">Send</button>
+        </div>
       `;
-      userFeedbackHistory.appendChild(div);
     }
 
-    socket.on('feedback reply received', (msgData) => {
-      const existing = document.getElementById(`user-fb-${msgData.id || msgData._id}`);
-      if (existing) {
-        existing.innerHTML = `
-          <div><b>You:</b> ${escapeHtml(msgData.text)}</div>
-          <div class="feedback-reply"><b>Admin Reply:</b> ${escapeHtml(msgData.reply.text)}</div>
-        `;
+    window.userReplyToThread = function(feedbackId) {
+      const input = document.getElementById(`user-reply-input-${feedbackId}`);
+      if (!input) return;
+      const text = input.value.trim();
+      if (!text) return;
+
+      socket.emit('reply feedback thread', { feedbackId, text }, (res) => {
+        if (res.success) {
+          appendUserFeedbackItem(res.updatedFeedback);
+        }
+      });
+    };
+
+    socket.on('feedback thread updated', (updatedFeedback) => {
+      if (isAdminUser && adminModal.style.display === 'flex') {
+        socket.emit('admin get data', (res) => {
+          if (res.success) renderAdminInbox(res.feedbackMessages);
+        });
+      } else if (!isAdminUser) {
+        appendUserFeedbackItem(updatedFeedback);
       }
     });
 
+    // Admin Panel Controls
     adminPanelBtn.addEventListener('click', () => {
       socket.emit('admin get data', (res) => {
         if (res.success) {
           renderAdminInbox(res.feedbackMessages);
+          renderAdminUsers(res.registeredUsers, res.bannedUsers);
           adminModal.style.display = 'flex';
         }
       });
@@ -519,41 +575,57 @@
       adminModal.style.display = 'none';
     });
 
+    tabBtnInbox.addEventListener('click', () => switchTab('inbox'));
+    tabBtnUsers.addEventListener('click', () => switchTab('users'));
+    tabBtnBulk.addEventListener('click', () => switchTab('bulk'));
+
+    function switchTab(tab) {
+      [tabBtnInbox, tabBtnUsers, tabBtnBulk].forEach(b => b.classList.remove('active'));
+      [tabContentInbox, tabContentUsers, tabContentBulk].forEach(c => c.style.display = 'none');
+
+      if (tab === 'inbox') { tabBtnInbox.classList.add('active'); tabContentInbox.style.display = 'block'; }
+      if (tab === 'users') { tabBtnUsers.classList.add('active'); tabContentUsers.style.display = 'block'; }
+      if (tab === 'bulk') { tabBtnBulk.classList.add('active'); tabContentBulk.style.display = 'flex'; }
+    }
+
     function renderAdminInbox(messages) {
       adminInboxList.innerHTML = '';
       if (!messages || messages.length === 0) {
-        adminInboxList.innerHTML = '<div style="font-size:12px; color:#888;">No feedback messages received yet.</div>';
+        adminInboxList.innerHTML = '<div style="font-size:12px; color:#888;">No feedback messages received.</div>';
         return;
       }
       messages.forEach(msg => {
         const msgId = msg.id || msg._id;
         const div = document.createElement('div');
         div.classList.add('feedback-item');
-        let replyForm = msg.reply 
-          ? `<div class="feedback-reply"><b>Replied:</b> ${escapeHtml(msg.reply.text)}</div>`
-          : `
-            <div style="display:flex; gap:5px; margin-top:6px;">
-              <input type="text" id="reply-input-${msgId}" placeholder="Type reply..." style="flex:1; padding:4px; font-size:11px;" />
-              <button class="btn-primary" style="padding:4px 8px; font-size:11px;" onclick="replyToFeedback('${msgId}')">Reply</button>
-            </div>
-          `;
+
+        let repliesHtml = '';
+        if (msg.replies && msg.replies.length > 0) {
+          repliesHtml = msg.replies.map(r => `
+            <div class="feedback-reply"><b>${escapeHtml(r.senderDisplayName)}:</b> ${escapeHtml(r.text)}</div>
+          `).join('');
+        }
 
         div.innerHTML = `
           <div><b>${escapeHtml(msg.senderDisplayName)}</b> (@${escapeHtml(msg.senderUsername)}) <span style="font-size:10px; color:#888;">${msg.timestamp}</span></div>
           <div style="margin-top: 4px;">${escapeHtml(msg.text)}</div>
-          ${replyForm}
+          ${repliesHtml}
+          <div style="display:flex; gap:5px; margin-top:6px;">
+            <input type="text" id="admin-reply-input-${msgId}" placeholder="Type reply..." style="flex:1; padding:4px; font-size:11px;" />
+            <button class="btn-primary" style="padding:4px 8px; font-size:11px;" onclick="adminReplyToThread('${msgId}')">Reply</button>
+          </div>
         `;
         adminInboxList.appendChild(div);
       });
     }
 
-    window.replyToFeedback = function(messageId) {
-      const input = document.getElementById(`reply-input-${messageId}`);
+    window.adminReplyToThread = function(feedbackId) {
+      const input = document.getElementById(`admin-reply-input-${feedbackId}`);
       if (!input) return;
-      const replyText = input.value.trim();
-      if (!replyText) return;
+      const text = input.value.trim();
+      if (!text) return;
 
-      socket.emit('admin reply feedback', { messageId, replyText }, (res) => {
+      socket.emit('reply feedback thread', { feedbackId, text }, (res) => {
         if (res.success) {
           socket.emit('admin get data', (adminRes) => {
             if (adminRes.success) renderAdminInbox(adminRes.feedbackMessages);
@@ -562,20 +634,36 @@
       });
     };
 
-    socket.on('new feedback message', () => {
-      if (adminModal.style.display === 'flex') {
-        socket.emit('admin get data', (res) => {
-          if (res.success) renderAdminInbox(res.feedbackMessages);
-        });
-      }
-    });
+    function renderAdminUsers(users, bannedList) {
+      adminUserList.innerHTML = '';
+      users.forEach(u => {
+        const isBanned = bannedList.includes(u.username);
+        const div = document.createElement('div');
+        div.style.padding = '8px';
+        div.style.borderBottom = '1px solid #eee';
+        div.style.fontSize = '12px';
+        div.innerHTML = `
+          <div style="font-weight:bold;">${escapeHtml(u.displayName)} (@${escapeHtml(u.username)})</div>
+          <div>Real Name: ${escapeHtml(u.realName)} | Email: ${escapeHtml(u.email)}</div>
+          <div style="font-size:10px; color:#888;">IP: ${u.createdIp}</div>
+        `;
+        adminUserList.appendChild(div);
+      });
+    }
 
-    openSettingsBtn.addEventListener('click', () => {
-      settingsModal.style.display = 'flex';
-    });
+    bulkUploadSubmitBtn.addEventListener('click', () => {
+      const rawText = bulkUploadText.value.trim();
+      if (!rawText) return;
 
-    closeSettingsBtn.addEventListener('click', () => {
-      settingsModal.style.display = 'none';
+      socket.emit('admin bulk upload accounts', { rawText }, (res) => {
+        alert(res.message);
+        if (res.success) {
+          bulkUploadText.value = '';
+          socket.emit('admin get data', (adminRes) => {
+            if (adminRes.success) renderAdminUsers(adminRes.registeredUsers, adminRes.bannedUsers);
+          });
+        }
+      });
     });
 
     function renderRoomList(rooms) {
@@ -599,6 +687,7 @@
       socket.emit('join room', { roomName }, (res) => {
         if (res.success) {
           activeRoom = roomName;
+          isCurrentRoomManager = res.isManager;
           chatBox.innerHTML = '';
           headerRoomTitle.textContent = roomName;
           messageInput.disabled = false;
@@ -624,6 +713,7 @@
     function renderSingleMessage(data) {
       const wrapper = document.createElement('div');
       wrapper.classList.add('message-wrapper');
+      if (data._id) wrapper.id = `msg-${data._id}`;
 
       if (data.system) {
         wrapper.classList.add('system');
@@ -631,15 +721,58 @@
       } else {
         const isSelf = data.username === currentUser;
         wrapper.classList.add(isSelf ? 'sent' : 'received');
+
+        let controlsHtml = `
+          <div class="msg-controls">
+            <span class="msg-action" onclick="deleteForSelf(this)">Delete for Me</span>
+            ${(isCurrentRoomManager && data._id) ? `<span class="msg-action" onclick="deleteForEveryone('${data._id}')">Delete Everyone</span>` : ''}
+            ${(isCurrentRoomManager) ? `<span class="msg-action" onclick="deleteUserMessages('${data.username}')">Delete All by User</span>` : ''}
+          </div>
+        `;
+
         wrapper.innerHTML = `
           ${!isSelf ? `<span class="sender-name">${escapeHtml(data.displayName)} (@${escapeHtml(data.username)})</span>` : ''}
           <div class="message-bubble">${escapeHtml(data.text)}</div>
+          ${controlsHtml}
         `;
       }
 
       chatBox.appendChild(wrapper);
       chatBox.scrollTop = chatBox.scrollHeight;
     }
+
+    window.deleteForSelf = function(el) {
+      const wrapper = el.closest('.message-wrapper');
+      if (wrapper) wrapper.remove();
+    };
+
+    window.deleteForEveryone = function(messageId) {
+      socket.emit('delete message for everyone', { messageId }, (res) => {
+        if (!res.success) alert(res.message);
+      });
+    };
+
+    window.deleteUserMessages = function(targetUsername) {
+      if (confirm(`Delete all messages by @${targetUsername} in this room?`)) {
+        socket.emit('delete user messages in room', { targetUsername }, (res) => {
+          if (!res.success) alert(res.message);
+        });
+      }
+    };
+
+    socket.on('message deleted for everyone', ({ messageId }) => {
+      const el = document.getElementById(`msg-${messageId}`);
+      if (el) el.remove();
+    });
+
+    socket.on('user messages deleted', ({ targetUsername }) => {
+      const wrappers = document.querySelectorAll('.message-wrapper');
+      wrappers.forEach(w => {
+        if (w.querySelector('.sender-name') && w.querySelector('.sender-name').innerText.includes(`@${targetUsername}`)) {
+          w.remove();
+        }
+      });
+    });
 
     function escapeHtml(text) {
       const div = document.createElement('div');
