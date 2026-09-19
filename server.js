@@ -51,8 +51,10 @@ const userSchema = new mongoose.Schema({
 const roomSchema = new mongoose.Schema({
   name: { type: String, required: true, unique: true },
   password: { type: String, default: null },
+  isPrivate: { type: Boolean, default: false },
   owner: { type: String, required: true },
-  managers: [{ type: String }]
+  managers: [{ type: String }],
+  members: [{ type: String }] // List of allowed usernames for private groups
 });
 
 const feedbackSchema = new mongoose.Schema({
@@ -118,8 +120,10 @@ async function initDefaults() {
       await Room.create({
         name: "International Talk",
         password: null,
+        isPrivate: false,
         owner: "System",
-        managers: [ADMIN_USERNAME]
+        managers: [ADMIN_USERNAME],
+        members: []
       });
       console.log('International Talk room initialized in database.');
     }
@@ -287,8 +291,10 @@ io.on('connection', (socket) => {
       roomList = dbRooms.map(r => ({
         name: r.name,
         hasPassword: !!r.password,
+        isPrivate: r.isPrivate,
         owner: r.owner,
-        isManager: socket.data.isAdmin || r.owner === user.username || (r.managers || []).includes(user.username)
+        isManager: socket.data.isAdmin || r.owner === user.username || (r.managers || []).includes(user.username),
+        members: r.members || []
       }));
     }
 
@@ -302,7 +308,7 @@ io.on('connection', (socket) => {
   });
 
   // Create Room
-  socket.on('create room', async ({ roomName, roomPassword }, callback) => {
+  socket.on('create room', async ({ roomName, roomPassword, isPrivate }, callback) => {
     const username = socket.data.username;
     if (!username) return callback({ success: false, message: 'Unauthorized.' });
 
@@ -319,21 +325,65 @@ io.on('connection', (socket) => {
       await Room.create({
         name: cleanRoomName,
         password: roomPassword || null,
+        isPrivate: !!isPrivate,
         owner: username,
-        managers: [username]
+        managers: [username],
+        members: [username]
       });
 
       const allRooms = await Room.find({});
       const updatedList = allRooms.map(r => ({
         name: r.name,
         hasPassword: !!r.password,
-        owner: r.owner
+        isPrivate: r.isPrivate,
+        owner: r.owner,
+        members: r.members || []
       }));
 
       io.emit('room list updated', updatedList);
     }
 
     callback({ success: true, message: `Room "${cleanRoomName}" created successfully!` });
+  });
+
+  // Add Specific User to Group
+  socket.on('add member to room', async ({ roomName, targetUsername }, callback) => {
+    const username = socket.data.username;
+    if (!username) return callback({ success: false, message: 'Unauthorized.' });
+
+    const cleanTarget = targetUsername.toLowerCase().trim();
+
+    if (mongoose.connection.readyState === 1) {
+      const room = await Room.findOne({ name: roomName });
+      if (!room) return callback({ success: false, message: 'Room not found.' });
+
+      const isManager = socket.data.isAdmin || room.owner === username || (room.managers || []).includes(username);
+      if (!isManager) return callback({ success: false, message: 'Permission denied. Only managers can add members.' });
+
+      const targetUser = await User.findOne({ username: cleanTarget });
+      if (!targetUser) return callback({ success: false, message: `User @${cleanTarget} does not exist.` });
+
+      if ((room.members || []).includes(cleanTarget)) {
+        return callback({ success: false, message: `@${cleanTarget} is already in this group.` });
+      }
+
+      await Room.findOneAndUpdate(
+        { name: roomName },
+        { $addToSet: { members: cleanTarget } }
+      );
+
+      const allRooms = await Room.find({});
+      const updatedList = allRooms.map(r => ({
+        name: r.name,
+        hasPassword: !!r.password,
+        isPrivate: r.isPrivate,
+        owner: r.owner,
+        members: r.members || []
+      }));
+
+      io.emit('room list updated', updatedList);
+      callback({ success: true, message: `Added @${cleanTarget} to "${roomName}"!` });
+    }
   });
 
   // Delete Room
@@ -359,7 +409,9 @@ io.on('connection', (socket) => {
       const updatedList = allRooms.map(r => ({
         name: r.name,
         hasPassword: !!r.password,
-        owner: r.owner
+        isPrivate: r.isPrivate,
+        owner: r.owner,
+        members: r.members || []
       }));
 
       io.emit('room list updated', updatedList);
@@ -369,14 +421,13 @@ io.on('connection', (socket) => {
     callback({ success: true, message: `Room "${roomName}" has been deleted.` });
   });
 
-  // Join Room (Fixed Double-Join Glitch)
+  // Join Room (Access checks for Private / Specific Members)
   socket.on('join room', async ({ roomName, roomPassword }, callback) => {
     const username = socket.data.username;
     const displayName = socket.data.displayName;
 
     if (!username) return callback({ success: false, message: 'Must be logged in.' });
 
-    // Guard against re-joining the exact room currently active
     if (socket.data.currentRoom === roomName) {
       let currentHistory = [];
       if (mongoose.connection.readyState === 1) {
@@ -390,7 +441,14 @@ io.on('connection', (socket) => {
       const room = await Room.findOne({ name: roomName });
       if (!room) return callback({ success: false, message: 'Room does not exist.' });
 
-      if (room.password && room.password !== roomPassword && !socket.data.isAdmin && room.owner !== username) {
+      const isManager = socket.data.isAdmin || room.owner === username || (room.managers || []).includes(username);
+      const isMember = (room.members || []).includes(username);
+
+      if (room.isPrivate && !isManager && !isMember) {
+        return callback({ success: false, message: 'This is a private group. You must be added by a manager to join.' });
+      }
+
+      if (room.password && room.password !== roomPassword && !isManager) {
         return callback({ success: false, message: 'Incorrect room password.' });
       }
 
@@ -407,8 +465,6 @@ io.on('connection', (socket) => {
 
       const history = await Message.find({ roomName }).sort({ timestamp: -1 }).limit(200);
       history.reverse();
-
-      const isManager = socket.data.isAdmin || room.owner === username || (room.managers || []).includes(username);
 
       callback({ success: true, history, isManager });
 
