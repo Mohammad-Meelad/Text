@@ -13,16 +13,19 @@
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
     .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.5); display: flex; justify-content: center; align-items: center; z-index: 100; }
-    .modal-box { background: white; padding: 25px; border-radius: 12px; width: 340px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.2); animation: popIn 0.25s ease; }
+    .modal-box { background: white; padding: 25px; border-radius: 12px; width: 350px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.2); animation: popIn 0.25s ease; }
     @keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
     .modal-box h3 { margin: 0 0 5px 0; color: #075e54; text-align: center; }
-    .modal-box input { padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; outline: none; }
+    .modal-box input, .modal-box textarea { padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; outline: none; }
+    .input-hint { font-size: 11px; color: #666; margin-top: -8px; }
+    
     .modal-actions { display: flex; gap: 10px; margin-top: 5px; }
     .btn-primary { flex: 1; padding: 10px; background-color: #25d366; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
     .btn-primary:disabled { background-color: #a8e6cf; cursor: not-allowed; }
     .btn-primary:hover:not(:disabled) { background-color: #1ebc57; }
     .btn-secondary { flex: 1; padding: 10px; background-color: #888; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+    
     .modal-error { color: red; font-size: 12px; text-align: center; display: none; }
     .modal-success { color: green; font-size: 12px; text-align: center; display: none; }
 
@@ -30,9 +33,12 @@
 
     #app-container { display: none; width: 95vw; max-width: 1000px; height: 90vh; background: #ffffff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); overflow: hidden; flex-direction: row; }
     #sidebar { width: 32%; min-width: 260px; background-color: #f0f2f5; border-right: 1px solid #e0e0e0; display: flex; flex-direction: column; }
-    #sidebar-header { background-color: #075e54; color: white; padding: 15px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
-    #admin-panel-btn { display: none; background-color: #ff9800; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; cursor: pointer; }
-    #open-create-modal-btn { margin: 10px; padding: 10px; background-color: #128c7e; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+    #sidebar-header { background-color: #075e54; color: white; padding: 12px 15px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+    
+    .action-bar { display: flex; gap: 5px; padding: 8px; background: #e9edef; border-bottom: 1px solid #ddd; }
+    .action-btn { flex: 1; padding: 8px; border: none; border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer; background-color: #128c7e; color: white; }
+    .action-btn.admin { background-color: #ff9800; display: none; }
+    
     #room-list { flex: 1; overflow-y: auto; list-style: none; margin: 0; padding: 0; }
     .room-item { padding: 12px 15px; border-bottom: 1px solid #e0e0e0; cursor: pointer; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
     .room-item.active { background-color: #d9fdd3; font-weight: bold; }
@@ -65,14 +71,13 @@
     <div style="font-weight: bold; font-size: 18px;">Connecting to Easy Chat...</div>
   </div>
 
-  <!-- Sign In & Registration Modals -->
+  <!-- Auth Modal -->
   <div id="auth-modal" class="modal-overlay" style="display: none;">
-    
     <!-- Sign In View -->
     <form id="login-box" class="modal-box" onsubmit="return false;">
       <h3>Easy Chat Sign In</h3>
-      <input id="login-username" type="text" placeholder="Your Name" autocomplete="username" />
-      <input id="login-password" type="password" placeholder="Password" autocomplete="current-password" />
+      <input id="login-username" type="text" placeholder="Username (e.g. john123)" autocomplete="username" required />
+      <input id="login-password" type="password" placeholder="Password" autocomplete="current-password" required />
       <div id="login-error" class="modal-error"></div>
       <button id="login-btn" type="submit" class="btn-primary">Sign In</button>
       <div class="toggle-auth" id="show-register-btn">Don't have an account? Register with Email</div>
@@ -81,14 +86,15 @@
     <!-- Registration View -->
     <form id="register-box" class="modal-box" style="display: none;" onsubmit="return false;">
       <h3>Create Easy Chat Account</h3>
-      <input id="reg-username" type="text" placeholder="Your Name" autocomplete="username" />
-      <input id="reg-email" type="email" placeholder="Your Email Address" autocomplete="email" />
-      <input id="reg-password" type="password" placeholder="Password" autocomplete="new-password" />
+      <input id="reg-username" type="text" placeholder="Username (lowercase & numbers only)" autocomplete="username" required />
+      <div class="input-hint">Example: meelad123 (no spaces or capital letters)</div>
+      <input id="reg-displayname" type="text" placeholder="Display Name (Your Name)" required />
+      <input id="reg-email" type="email" placeholder="Email Address" autocomplete="email" required />
+      <input id="reg-password" type="password" placeholder="Password" autocomplete="new-password" required />
       <div id="reg-error" class="modal-error"></div>
       <div id="reg-success" class="modal-success"></div>
       <button id="send-code-btn" type="button" class="btn-primary">Send Verification Code</button>
 
-      <!-- Code Verification Step -->
       <div id="code-step" style="display: none; flex-direction: column; gap: 8px; margin-top: 5px;">
         <input id="reg-code" type="text" placeholder="6-Digit Verification Code" />
         <button id="verify-code-btn" type="button" class="btn-primary">Verify Code & Complete</button>
@@ -98,14 +104,44 @@
     </form>
   </div>
 
+  <!-- Contact Admin Modal -->
+  <div id="contact-admin-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-box">
+      <h3>💬 Chat to Admin</h3>
+      <p style="font-size: 12px; color: #555; margin: 0;">Send a direct feedback message or report an issue to Meelad Mohammad.</p>
+      <textarea id="admin-message-input" rows="4" placeholder="Type your message or feedback here..."></textarea>
+      <div id="contact-admin-msg" class="modal-success"></div>
+      <div class="modal-actions">
+        <button id="send-admin-msg-btn" class="btn-primary">Send Message</button>
+        <button id="close-admin-msg-btn" class="btn-secondary">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal Placeholder -->
+  <div id="settings-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-box">
+      <h3>⚙️ Settings</h3>
+      <p style="font-size: 13px; color: #666; text-align: center; margin: 20px 0;">Settings options will be added here soon.</p>
+      <div class="modal-actions">
+        <button id="close-settings-btn" class="btn-secondary">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Main App Container -->
   <div id="app-container">
     <div id="sidebar">
       <div id="sidebar-header">
         <span id="user-display">Easy Chat</span>
-        <button id="admin-panel-btn">🛡️ Admin</button>
       </div>
-      <button id="open-create-modal-btn">+ Create New Group</button>
+
+      <div class="action-bar">
+        <button id="open-contact-admin-btn" class="action-btn">💬 Feedback</button>
+        <button id="open-settings-btn" class="action-btn">⚙️ Settings</button>
+        <button id="admin-panel-btn" class="action-btn admin">🛡️ Admin</button>
+      </div>
+
       <ul id="room-list"></ul>
     </div>
 
@@ -128,6 +164,7 @@
 
     let activeRoom = null;
     let currentUser = null;
+    let currentDisplayName = null;
     let cooldownTimer = null;
 
     // UI References
@@ -140,6 +177,7 @@
     const showLoginBtn = document.getElementById('show-login-btn');
 
     const regUsername = document.getElementById('reg-username');
+    const regDisplayName = document.getElementById('reg-displayname');
     const regEmail = document.getElementById('reg-email');
     const regPassword = document.getElementById('reg-password');
     const regCode = document.getElementById('reg-code');
@@ -154,9 +192,21 @@
     const loginBtn = document.getElementById('login-btn');
     const loginError = document.getElementById('login-error');
 
+    const contactAdminModal = document.getElementById('contact-admin-modal');
+    const openContactAdminBtn = document.getElementById('open-contact-admin-btn');
+    const adminMessageInput = document.getElementById('admin-message-input');
+    const sendAdminMsgBtn = document.getElementById('send-admin-msg-btn');
+    const closeAdminMsgBtn = document.getElementById('close-admin-msg-btn');
+    const contactAdminMsg = document.getElementById('contact-admin-msg');
+
+    const settingsModal = document.getElementById('settings-modal');
+    const openSettingsBtn = document.getElementById('open-settings-btn');
+    const closeSettingsBtn = document.getElementById('close-settings-btn');
+
     const appContainer = document.getElementById('app-container');
     const roomListEl = document.getElementById('room-list');
     const userDisplay = document.getElementById('user-display');
+    const adminPanelBtn = document.getElementById('admin-panel-btn');
 
     const headerRoomTitle = document.getElementById('header-room-title');
     const chatBox = document.getElementById('chat-box');
@@ -180,16 +230,22 @@
       loginBox.style.display = 'flex';
     });
 
-    // Request Email Code with 30s Cooldown Timer
+    // Enforce lowercase typing on registration username
+    regUsername.addEventListener('input', (e) => {
+      e.target.value = e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '');
+    });
+
+    // Request Email Verification Code
     sendCodeBtn.addEventListener('click', () => {
       const username = regUsername.value.trim();
+      const displayName = regDisplayName.value.trim();
       const email = regEmail.value.trim();
       const password = regPassword.value.trim();
 
       regError.style.display = 'none';
       regSuccess.style.display = 'none';
 
-      socket.emit('request code', { username, email, password }, (res) => {
+      socket.emit('request code', { username, displayName, email, password }, (res) => {
         if (res.success) {
           regSuccess.textContent = res.message;
           regSuccess.style.display = 'block';
@@ -238,7 +294,7 @@
       });
     });
 
-    // Login Action
+    // Sign In Action
     loginBox.addEventListener('submit', () => {
       const username = loginUsername.value.trim();
       const password = loginPassword.value.trim();
@@ -246,9 +302,15 @@
       socket.emit('login', { username, password }, (res) => {
         if (res.success) {
           currentUser = username;
+          currentDisplayName = res.displayName;
+
           authModal.style.display = 'none';
           appContainer.style.display = 'flex';
-          userDisplay.textContent = `Easy Chat | ${username}`;
+          userDisplay.textContent = `${currentDisplayName}`;
+
+          if (res.isAdmin) {
+            adminPanelBtn.style.display = 'block';
+          }
 
           renderRoomList(res.rooms);
           joinGroup("International Talk");
@@ -257,6 +319,41 @@
           loginError.style.display = 'block';
         }
       });
+    });
+
+    // Direct Feedback/Message to Admin Handlers
+    openContactAdminBtn.addEventListener('click', () => {
+      adminMessageInput.value = '';
+      contactAdminMsg.style.display = 'none';
+      contactAdminModal.style.display = 'flex';
+    });
+
+    closeAdminMsgBtn.addEventListener('click', () => {
+      contactAdminModal.style.display = 'none';
+    });
+
+    sendAdminMsgBtn.addEventListener('click', () => {
+      const text = adminMessageInput.value.trim();
+      if (!text) return;
+
+      socket.emit('send admin message', text, (res) => {
+        if (res.success) {
+          contactAdminMsg.textContent = res.message;
+          contactAdminMsg.style.display = 'block';
+          setTimeout(() => {
+            contactAdminModal.style.display = 'none';
+          }, 1500);
+        }
+      });
+    });
+
+    // Settings Modal Handlers
+    openSettingsBtn.addEventListener('click', () => {
+      settingsModal.style.display = 'flex';
+    });
+
+    closeSettingsBtn.addEventListener('click', () => {
+      settingsModal.style.display = 'none';
     });
 
     function renderRoomList(rooms) {
@@ -313,7 +410,7 @@
         const isSelf = data.username === currentUser;
         wrapper.classList.add(isSelf ? 'sent' : 'received');
         wrapper.innerHTML = `
-          ${!isSelf ? `<span class="sender-name">${escapeHtml(data.username)}</span>` : ''}
+          ${!isSelf ? `<span class="sender-name">${escapeHtml(data.displayName)} (@${escapeHtml(data.username)})</span>` : ''}
           <div class="message-bubble">${escapeHtml(data.text)}</div>
         `;
       }
