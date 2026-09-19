@@ -28,7 +28,7 @@ const ADMIN_PASS = "@Meelad@786@786";
 
 // Users database
 const users = {
-  [ADMIN_USER]: { password: ADMIN_PASS, email: "admin@globalchat.com", verified: true }
+  [ADMIN_USER]: { password: ADMIN_PASS, email: "admin@easychat.com", verified: true }
 };
 
 // Pending verifications store: { email: { code, username, password, lastSent } }
@@ -45,7 +45,7 @@ const messageHistory = {
 };
 
 app.get('/', (req, res) => {
-  res.send('Socket.IO Chat Backend Running');
+  res.send('Easy Chat Backend is Running');
 });
 
 io.on('connection', (socket) => {
@@ -80,7 +80,7 @@ io.on('connection', (socket) => {
     const resendApiKey = process.env.RESEND_API_KEY;
 
     if (!resendApiKey) {
-      console.log(`\n--- [TEST MODE CODE] Verification code for ${email} is: ${code} ---\n`);
+      console.log(`\n--- [TEST MODE CODE] Easy Chat verification code for ${email} is: ${code} ---\n`);
       return callback({ 
         success: true, 
         message: `[TEST MODE] Code generated! (Check Render logs if RESEND_API_KEY is missing).` 
@@ -95,14 +95,14 @@ io.on('connection', (socket) => {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          from: 'Global Chat <onboarding@resend.dev>',
+          from: 'Easy Chat <onboarding@resend.dev>',
           to: [email],
-          subject: 'Your Verification Code',
+          subject: 'Your Easy Chat Verification Code',
           html: `
             <div style="font-family: Arial, sans-serif; padding: 20px;">
-              <h2 style="color: #075e54;">Global Chat Sign-Up</h2>
+              <h2 style="color: #075e54;">Easy Chat Verification</h2>
               <p>Hello <b>${username}</b>,</p>
-              <p>Your verification code is:</p>
+              <p>Your verification code to complete your Easy Chat sign-up is:</p>
               <h1 style="color: #25d366; letter-spacing: 4px;">${code}</h1>
             </div>
           `
@@ -141,7 +141,7 @@ io.on('connection', (socket) => {
     };
 
     delete pendingVerifications[email];
-    callback({ success: true, message: 'Account verified successfully!' });
+    callback({ success: true, message: 'Account verified successfully! You can now log into Easy Chat.' });
   });
 
   // Sign In
