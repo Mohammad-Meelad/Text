@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const https = require('https');
 const { Server } = require('socket.io');
+const mongoose = require('mongoose');
 
 const app = express();
 const server = http.createServer(app);
@@ -13,92 +14,138 @@ const io = new Server(server, {
   }
 });
 
+// Self-ping to keep Render free tier awake
 setInterval(() => {
-  https.get('https://text-p3e7.onrender.com/', (res) => {
-    console.log('Self-ping sent to maintain Render instance.');
+  https.get('https://text-p3e7.onrender.com/', () => {
+    console.log('Self-ping sent.');
   }).on('error', (err) => {
-    console.error('Self-ping error:', err.message);
+    console.error('Self-ping failed:', err.message);
   });
 }, 10 * 60 * 1000);
 
+// Connect to MongoDB Atlas
+const MONGODB_URI = process.env.MONGODB_URI;
+
+if (MONGODB_URI) {
+  mongoose.connect(MONGODB_URI)
+    .then(() => console.log('Successfully connected to MongoDB Atlas!'))
+    .catch((err) => console.error('MongoDB connection error:', err));
+} else {
+  console.warn('WARNING: MONGODB_URI variable missing. Server operating in memory.');
+}
+
+// Database Schemas
+const userSchema = new mongoose.Schema({
+  username: { type: String, required: true, unique: true, lowercase: true },
+  displayName: { type: String, required: true },
+  password: { type: String, required: true },
+  email: { type: String, required: true },
+  verified: { type: Boolean, default: false }
+});
+
+const feedbackSchema = new mongoose.Schema({
+  senderUsername: { type: String, required: true },
+  senderDisplayName: { type: String, required: true },
+  text: { type: String, required: true },
+  timestamp: { type: String, required: true },
+  reply: {
+    text: String,
+    timestamp: String
+  }
+});
+
+const messageSchema = new mongoose.Schema({
+  roomName: { type: String, required: true },
+  username: String,
+  displayName: String,
+  text: String,
+  senderId: String,
+  system: Boolean,
+  timestamp: { type: Date, default: Date.now }
+});
+
+const User = mongoose.model('User', userSchema);
+const Feedback = mongoose.model('Feedback', feedbackSchema);
+const Message = mongoose.model('Message', messageSchema);
+
+// Admin Credentials
 const ADMIN_USERNAME = "admin";
 const ADMIN_DISPLAY = "Meelad Mohammad";
 const ADMIN_PASS = "@Meelad@786@786";
 const ADMIN_EMAIL = "mohammad.milad.stu@almustafaacademy.ca";
 
-// Users database
-const users = {
-  [ADMIN_USERNAME]: { 
-    password: ADMIN_PASS, 
-    email: ADMIN_EMAIL, 
-    displayName: ADMIN_DISPLAY 
+// Auto-create Admin Account in Database
+async function initAdmin() {
+  if (mongoose.connection.readyState === 1) {
+    const adminExists = await User.findOne({ username: ADMIN_USERNAME });
+    if (!adminExists) {
+      await User.create({
+        username: ADMIN_USERNAME,
+        displayName: ADMIN_DISPLAY,
+        password: ADMIN_PASS,
+        email: ADMIN_EMAIL,
+        verified: true
+      });
+      console.log('Admin account created in MongoDB.');
+    }
   }
-};
+}
+mongoose.connection.once('open', initAdmin);
 
 const pendingVerifications = {};
 const bannedUsers = new Set();
-const activeSockets = {}; // { username: socketId }
+const activeSockets = {};
 
 const rooms = {
   "International Talk": { password: null, owner: "System" }
 };
 
-const messageHistory = {
-  "International Talk": []
-};
-
-// Saved feedback store across admin offline/online sessions
-const feedbackStore = [];
-
 app.get('/', (req, res) => {
-  res.send('Easy Chat Backend is Running');
+  res.send('Easy Chat Backend Running');
 });
 
 io.on('connection', (socket) => {
 
-  // Step 1: Request Verification Code
+  // Verification Code Request
   socket.on('request code', async ({ username, displayName, email, password }, callback) => {
     if (!username || !displayName || !email || !password) {
       return callback({ success: false, message: 'All fields are required.' });
     }
 
-    const cleanUsername = username.toLowerCase().trim();
     const usernameRegex = /^[a-z0-9]+$/;
-    if (!usernameRegex.test(cleanUsername)) {
+    if (!usernameRegex.test(username)) {
       return callback({ 
         success: false, 
         message: 'Username must contain only lowercase letters and numbers.' 
       });
     }
 
-    if (bannedUsers.has(cleanUsername)) {
-      return callback({ success: false, message: 'This username is currently banned.' });
+    if (bannedUsers.has(username)) {
+      return callback({ success: false, message: 'This username is banned.' });
     }
 
-    if (users[cleanUsername]) {
-      return callback({ success: false, message: 'Username is already taken.' });
+    const existingUser = mongoose.connection.readyState === 1 
+      ? await User.findOne({ username })
+      : null;
+
+    if (existingUser) {
+      return callback({ success: false, message: 'Username already taken.' });
     }
 
     const now = Date.now();
     if (pendingVerifications[email] && (now - pendingVerifications[email].lastSent < 30000)) {
       const remaining = Math.ceil((30000 - (now - pendingVerifications[email].lastSent)) / 1000);
-      return callback({ 
-        success: false, 
-        message: `Please wait ${remaining} seconds before requesting a new code.` 
-      });
+      return callback({ success: false, message: `Please wait ${remaining} seconds before requesting a new code.` });
     }
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
-    pendingVerifications[email] = { code, username: cleanUsername, displayName, password, lastSent: now };
+    pendingVerifications[email] = { code, username, displayName, password, lastSent: now };
 
     const resendApiKey = process.env.RESEND_API_KEY;
 
     if (!resendApiKey) {
-      console.log(`\n--- [TEST MODE CODE] Easy Chat code for ${email}: ${code} ---\n`);
-      return callback({ 
-        success: true, 
-        message: `[TEST MODE] Code generated! (Check Render logs if RESEND_API_KEY is missing).` 
-      });
+      console.log(`\n--- Verification code for ${email}: ${code} ---\n`);
+      return callback({ success: true, message: '[TEST MODE] Verification code generated (check Render logs).' });
     }
 
     try {
@@ -113,11 +160,11 @@ io.on('connection', (socket) => {
           to: [email],
           subject: 'Your Easy Chat Verification Code',
           html: `
-            <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f9f9f9; border-radius: 8px;">
+            <div style="font-family: Arial, sans-serif; padding: 20px;">
               <h2 style="color: #075e54;">Easy Chat Verification</h2>
-              <p>Hello <b>${displayName}</b> (@${cleanUsername}),</p>
+              <p>Hello <b>${displayName}</b> (@${username}),</p>
               <p>Your verification code is:</p>
-              <h1 style="color: #25d366; letter-spacing: 5px;">${code}</h1>
+              <h1 style="color: #25d366; letter-spacing: 4px;">${code}</h1>
             </div>
           `
         })
@@ -126,56 +173,55 @@ io.on('connection', (socket) => {
       if (response.ok) {
         callback({ success: true, message: 'Verification code sent to your email!' });
       } else {
-        const errData = await response.json();
-        console.error('Resend error:', errData);
         callback({ success: false, message: 'Failed to send verification email.' });
       }
     } catch (error) {
-      console.error('Fetch error:', error);
       callback({ success: false, message: 'Email service connection error.' });
     }
   });
 
-  // Step 2: Verify Code
-  socket.on('verify code', ({ email, code }, callback) => {
+  // Verify Code
+  socket.on('verify code', async ({ email, code }, callback) => {
     const pending = pendingVerifications[email];
 
-    if (!pending) {
-      return callback({ success: false, message: 'No verification request found for this email.' });
-    }
+    if (!pending) return callback({ success: false, message: 'No verification request found for this email.' });
+    if (pending.code !== code) return callback({ success: false, message: 'Invalid verification code.' });
 
-    if (pending.code !== code) {
-      return callback({ success: false, message: 'Invalid verification code.' });
+    if (mongoose.connection.readyState === 1) {
+      await User.create({
+        username: pending.username,
+        displayName: pending.displayName,
+        password: pending.password,
+        email: email,
+        verified: true
+      });
     }
-
-    users[pending.username] = {
-      password: pending.password,
-      email: email,
-      displayName: pending.displayName
-    };
 
     delete pendingVerifications[email];
-    callback({ success: true, message: 'Account verified successfully! You can now log into Easy Chat.' });
+    callback({ success: true, message: 'Account verified successfully!' });
   });
 
-  // Login Event
-  socket.on('login', ({ username, password }, callback) => {
+  // User Login
+  socket.on('login', async ({ username, password }, callback) => {
     if (!username || !password) {
-      return callback({ success: false, message: 'Username and password are required.' });
+      return callback({ success: false, message: 'Username and Password required.' });
     }
 
     const cleanUsername = username.toLowerCase().trim();
 
     if (bannedUsers.has(cleanUsername)) {
-      return callback({ success: false, message: 'Your account has been banned by the Administrator.' });
+      return callback({ success: false, message: 'Your account is banned.' });
     }
 
-    const user = users[cleanUsername];
+    let user = null;
+    if (mongoose.connection.readyState === 1) {
+      user = await User.findOne({ username: cleanUsername });
+    }
 
     if (cleanUsername === ADMIN_USERNAME) {
       if (password !== ADMIN_PASS) return callback({ success: false, message: 'Incorrect Admin password.' });
     } else if (!user) {
-      return callback({ success: false, message: 'User account not found. Please register first.' });
+      return callback({ success: false, message: 'User not found. Please register first.' });
     } else if (user.password !== password) {
       return callback({ success: false, message: 'Incorrect password.' });
     }
@@ -185,35 +231,40 @@ io.on('connection', (socket) => {
     socket.data.isAdmin = (cleanUsername === ADMIN_USERNAME);
     activeSockets[cleanUsername] = socket.id;
 
-    const userFeedbackHistory = feedbackStore.filter(msg => msg.senderUsername === cleanUsername);
+    let userFeedbackHistory = [];
+    if (mongoose.connection.readyState === 1) {
+      userFeedbackHistory = await Feedback.find({ senderUsername: cleanUsername });
+    }
 
     callback({ 
       success: true, 
-      rooms: getRoomList(), 
+      rooms: Object.keys(rooms).map(name => ({ name, hasPassword: !!rooms[name].password, owner: rooms[name].owner })), 
       isAdmin: socket.data.isAdmin,
       displayName: socket.data.displayName,
-      userFeedbackHistory: userFeedbackHistory
+      userFeedbackHistory
     });
   });
 
-  // User Feedback Event
-  socket.on('send admin message', (msgText, callback) => {
+  // Feedback System
+  socket.on('send admin message', async (msgText, callback) => {
     const username = socket.data.username;
     const displayName = socket.data.displayName;
 
     if (!username) return callback({ success: false, message: 'Must be logged in.' });
-    if (socket.data.isAdmin) return callback({ success: false, message: 'Admins cannot send feedback to themselves.' });
+    if (socket.data.isAdmin) return callback({ success: false, message: 'Admins cannot send feedback.' });
 
-    const msgData = {
-      id: Date.now().toString(),
+    let msgData = {
       senderUsername: username,
       senderDisplayName: displayName,
       text: msgText,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: new Date().toLocaleTimeString(),
       reply: null
     };
 
-    feedbackStore.push(msgData);
+    if (mongoose.connection.readyState === 1) {
+      const created = await Feedback.create(msgData);
+      msgData.id = created._id;
+    }
 
     const adminSocketId = activeSockets[ADMIN_USERNAME];
     if (adminSocketId) {
@@ -223,39 +274,30 @@ io.on('connection', (socket) => {
     callback({ success: true, message: 'Feedback sent directly to Admin!', msgData });
   });
 
-  // Admin Reply to Feedback Event
-  socket.on('admin reply feedback', ({ messageId, replyText }, callback) => {
+  socket.on('admin reply feedback', async ({ messageId, replyText }, callback) => {
     if (!socket.data.isAdmin) return callback({ success: false, message: 'Unauthorized' });
 
-    const feedbackObj = feedbackStore.find(msg => msg.id === messageId);
-    if (!feedbackObj) return callback({ success: false, message: 'Feedback entry not found.' });
+    let feedbackObj = null;
+    if (mongoose.connection.readyState === 1) {
+      feedbackObj = await Feedback.findByIdAndUpdate(
+        messageId, 
+        { reply: { text: replyText, timestamp: new Date().toLocaleTimeString() } },
+        { new: true }
+      );
+    }
 
-    feedbackObj.reply = {
-      text: replyText,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-
-    const userSocketId = activeSockets[feedbackObj.senderUsername];
-    if (userSocketId) {
-      io.to(userSocketId).emit('feedback reply received', feedbackObj);
+    if (feedbackObj) {
+      const userSocketId = activeSockets[feedbackObj.senderUsername];
+      if (userSocketId) {
+        io.to(userSocketId).emit('feedback reply received', feedbackObj);
+      }
     }
 
     callback({ success: true, feedbackObj });
   });
 
-  socket.on('create room', ({ roomName, roomPassword }, callback) => {
-    const username = socket.data.username;
-    if (!username) return callback({ success: false, message: 'Must be logged in.' });
-    if (!roomName) return callback({ success: false, message: 'Group Name required.' });
-    if (rooms[roomName]) return callback({ success: false, message: 'Group already exists.' });
-
-    rooms[roomName] = { password: roomPassword || null, owner: username };
-    messageHistory[roomName] = [];
-    broadcastRoomList();
-    callback({ success: true });
-  });
-
-  socket.on('join room', ({ roomName, roomPassword }, callback) => {
+  // Room Join & Chat Messages
+  socket.on('join room', async ({ roomName, roomPassword }, callback) => {
     const username = socket.data.username;
     const displayName = socket.data.displayName;
 
@@ -264,175 +306,62 @@ io.on('connection', (socket) => {
     const room = rooms[roomName];
     if (!room) return callback({ success: false, message: 'Group does not exist.' });
 
-    if (!socket.data.isAdmin && room.password && room.password !== roomPassword) {
-      return callback({ success: false, message: 'Incorrect group password.' });
-    }
-
     if (socket.data.currentRoom) {
       const oldRoom = socket.data.currentRoom;
       socket.leave(oldRoom);
-      const leaveMsg = { 
-        username: 'System', 
-        displayName: 'System', 
-        text: `${displayName} has left ${oldRoom}.`, 
-        system: true 
-      };
-      saveMessage(oldRoom, leaveMsg);
+      const leaveMsg = { roomName: oldRoom, username: 'System', displayName: 'System', text: `${displayName} has left ${oldRoom}.`, system: true };
+      if (mongoose.connection.readyState === 1) await Message.create(leaveMsg);
       io.to(oldRoom).emit('chat message', leaveMsg);
     }
 
     socket.join(roomName);
     socket.data.currentRoom = roomName;
 
-    const history = messageHistory[roomName] || [];
+    let history = [];
+    if (mongoose.connection.readyState === 1) {
+      history = await Message.find({ roomName }).sort({ timestamp: -1 }).limit(200);
+      history.reverse();
+    }
+
     callback({ success: true, history });
 
-    const joinMsg = { 
-      username: 'System', 
-      displayName: 'System', 
-      text: `${displayName} joined ${roomName}.`, 
-      system: true 
-    };
-    saveMessage(roomName, joinMsg);
+    const joinMsg = { roomName, username: 'System', displayName: 'System', text: `${displayName} joined ${roomName}.`, system: true };
+    if (mongoose.connection.readyState === 1) await Message.create(joinMsg);
     io.to(roomName).emit('chat message', joinMsg);
   });
 
-  socket.on('chat message', (msgText) => {
+  socket.on('chat message', async (msgText) => {
     const room = socket.data.currentRoom;
     const username = socket.data.username;
     const displayName = socket.data.displayName;
 
     if (!room || !username || bannedUsers.has(username)) return;
 
-    const msgData = { username, displayName, text: msgText, senderId: socket.id, system: false };
-    saveMessage(room, msgData);
+    const msgData = { roomName: room, username, displayName, text: msgText, senderId: socket.id, system: false };
+    if (mongoose.connection.readyState === 1) await Message.create(msgData);
     io.to(room).emit('chat message', msgData);
   });
 
-  // Get Admin Data Overview
-  socket.on('admin get data', (callback) => {
-    if (!socket.data.isAdmin) return callback({ success: false, message: 'Unauthorized' });
+  // Admin Data Panel
+  socket.on('admin get data', async (callback) => {
+    if (!socket.data.isAdmin) return callback({ success: false });
 
-    const userDetails = Object.keys(users).map(u => ({
-      username: u,
-      displayName: users[u].displayName,
-      email: users[u].email,
-      isBanned: bannedUsers.has(u),
-      isOnline: !!activeSockets[u]
-    }));
+    let registeredUsers = [];
+    let feedbackMessages = [];
+
+    if (mongoose.connection.readyState === 1) {
+      registeredUsers = await User.find({}, 'username displayName email verified');
+      feedbackMessages = await Feedback.find({});
+    }
 
     callback({
       success: true,
-      users: userDetails,
+      activeUsers: Object.keys(activeSockets),
+      registeredUsers,
       bannedUsers: Array.from(bannedUsers),
       rooms: Object.keys(rooms),
-      feedbackMessages: feedbackStore
+      feedbackMessages
     });
-  });
-
-  // Admin Account Management
-  socket.on('admin create user', ({ username, displayName, email, password }, callback) => {
-    if (!socket.data.isAdmin) return callback({ success: false, message: 'Unauthorized' });
-
-    const cleanUsername = username.toLowerCase().trim();
-    if (!cleanUsername || !displayName || !email || !password) {
-      return callback({ success: false, message: 'All fields are required.' });
-    }
-
-    if (users[cleanUsername]) {
-      return callback({ success: false, message: 'Username already exists.' });
-    }
-
-    users[cleanUsername] = { password, email, displayName };
-    callback({ success: true, message: `Account @${cleanUsername} created successfully!` });
-  });
-
-  socket.on('admin edit user', ({ targetUsername, displayName, email, password }, callback) => {
-    if (!socket.data.isAdmin) return callback({ success: false, message: 'Unauthorized' });
-
-    const cleanUsername = targetUsername.toLowerCase().trim();
-    if (!users[cleanUsername]) {
-      return callback({ success: false, message: 'User account not found.' });
-    }
-
-    if (displayName) users[cleanUsername].displayName = displayName;
-    if (email) users[cleanUsername].email = email;
-    if (password) users[cleanUsername].password = password;
-
-    callback({ success: true, message: `Updated details for @${cleanUsername}.` });
-  });
-
-  socket.on('admin delete user', (targetUser, callback) => {
-    if (!socket.data.isAdmin) return callback({ success: false, message: 'Unauthorized' });
-    const cleanUsername = targetUser.toLowerCase().trim();
-
-    if (cleanUsername === ADMIN_USERNAME) {
-      return callback({ success: false, message: 'Cannot delete the primary Admin account.' });
-    }
-
-    if (!users[cleanUsername]) {
-      return callback({ success: false, message: 'User account not found.' });
-    }
-
-    delete users[cleanUsername];
-
-    const targetSocketId = activeSockets[cleanUsername];
-    if (targetSocketId) {
-      const targetSocket = io.sockets.sockets.get(targetSocketId);
-      if (targetSocket) {
-        targetSocket.emit('kicked', 'Your account was removed by the Admin.');
-        targetSocket.disconnect();
-      }
-      delete activeSockets[cleanUsername];
-    }
-
-    callback({ success: true, message: `Account @${cleanUsername} has been permanently deleted.` });
-  });
-
-  socket.on('admin kick user', (targetUser, callback) => {
-    if (!socket.data.isAdmin) return callback({ success: false, message: 'Unauthorized' });
-    const cleanUsername = targetUser.toLowerCase().trim();
-
-    if (cleanUsername === ADMIN_USERNAME) return callback({ success: false, message: 'Cannot kick Admin.' });
-
-    const targetSocketId = activeSockets[cleanUsername];
-    if (targetSocketId) {
-      const targetSocket = io.sockets.sockets.get(targetSocketId);
-      if (targetSocket) {
-        targetSocket.emit('kicked', 'You have been kicked by the Admin.');
-        targetSocket.disconnect();
-      }
-      delete activeSockets[cleanUsername];
-      return callback({ success: true });
-    }
-    callback({ success: false, message: 'User is not currently online.' });
-  });
-
-  socket.on('admin ban user', (targetUser, callback) => {
-    if (!socket.data.isAdmin) return callback({ success: false, message: 'Unauthorized' });
-    const cleanUsername = targetUser.toLowerCase().trim();
-
-    if (cleanUsername === ADMIN_USERNAME) return callback({ success: false, message: 'Cannot ban Admin.' });
-
-    bannedUsers.add(cleanUsername);
-
-    const targetSocketId = activeSockets[cleanUsername];
-    if (targetSocketId) {
-      const targetSocket = io.sockets.sockets.get(targetSocketId);
-      if (targetSocket) {
-        targetSocket.emit('kicked', 'Your account has been banned by the Admin.');
-        targetSocket.disconnect();
-      }
-      delete activeSockets[cleanUsername];
-    }
-    callback({ success: true });
-  });
-
-  socket.on('admin unban user', (targetUser, callback) => {
-    if (!socket.data.isAdmin) return callback({ success: false, message: 'Unauthorized' });
-    const cleanUsername = targetUser.toLowerCase().trim();
-    bannedUsers.delete(cleanUsername);
-    callback({ success: true });
   });
 
   socket.on('disconnect', () => {
@@ -441,36 +370,12 @@ io.on('connection', (socket) => {
     const displayName = socket.data.displayName;
 
     if (username) delete activeSockets[username];
-
     if (room && username) {
-      const disconnectMsg = { 
-        username: 'System', 
-        displayName: 'System', 
-        text: `${displayName} has left ${room}.`, 
-        system: true 
-      };
-      saveMessage(room, disconnectMsg);
+      const disconnectMsg = { roomName: room, username: 'System', displayName: 'System', text: `${displayName} has left ${room}.`, system: true };
+      if (mongoose.connection.readyState === 1) Message.create(disconnectMsg);
       io.to(room).emit('chat message', disconnectMsg);
     }
   });
-
-  function saveMessage(roomName, msgData) {
-    if (!messageHistory[roomName]) messageHistory[roomName] = [];
-    messageHistory[roomName].push(msgData);
-    if (messageHistory[roomName].length > 200) messageHistory[roomName].shift();
-  }
-
-  function getRoomList() {
-    return Object.keys(rooms).map(name => ({
-      name: name,
-      hasPassword: !!rooms[name].password,
-      owner: rooms[name].owner
-    }));
-  }
-
-  function broadcastRoomList() {
-    io.emit('room list update', getRoomList());
-  }
 });
 
 const PORT = process.env.PORT || 3000;
