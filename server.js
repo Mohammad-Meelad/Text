@@ -13,7 +13,7 @@ const io = new Server(server, {
   }
 });
 
-// Self-ping every 10 minutes to keep Render instance awake
+// Self-ping to keep Render free tier awake
 setInterval(() => {
   https.get('https://text-p3e7.onrender.com/', (res) => {
     console.log('Self-ping sent.');
@@ -22,19 +22,20 @@ setInterval(() => {
   });
 }, 10 * 60 * 1000);
 
-// Admin credentials
-const ADMIN_USER = "Meelad Mohammad";
+// Admin account credentials
+const ADMIN_USERNAME = "meeladmohammad";
+const ADMIN_DISPLAY = "Meelad Mohammad";
 const ADMIN_PASS = "@Meelad@786@786";
 
-// Users database
+// Users database: { username: { password, email, displayName } }
 const users = {
-  [ADMIN_USER]: { password: ADMIN_PASS, email: "admin@easychat.com", verified: true }
+  [ADMIN_USERNAME]: { password: ADMIN_PASS, email: "admin@easychat.com", displayName: ADMIN_DISPLAY }
 };
 
-// Pending verifications store: { email: { code, username, password, lastSent } }
+// Pending verifications store: { email: { code, username, displayName, password, lastSent } }
 const pendingVerifications = {};
 const bannedUsers = new Set();
-const activeSockets = {};
+const activeSockets = {}; // { username: socketId }
 
 const rooms = {
   "International Talk": { password: null, owner: "System" }
@@ -44,16 +45,28 @@ const messageHistory = {
   "International Talk": []
 };
 
+// Admin direct messages store: [ { senderUsername, senderDisplayName, text, timestamp } ]
+const adminDirectMessages = [];
+
 app.get('/', (req, res) => {
   res.send('Easy Chat Backend is Running');
 });
 
 io.on('connection', (socket) => {
 
-  // Step 1: Request Email Verification Code via Resend
-  socket.on('request code', async ({ username, email, password }, callback) => {
-    if (!username || !email || !password) {
+  // Step 1: Request Verification Code
+  socket.on('request code', async ({ username, displayName, email, password }, callback) => {
+    if (!username || !displayName || !email || !password) {
       return callback({ success: false, message: 'All fields are required.' });
+    }
+
+    // Strict Username Validation: lowercase letters and numbers only
+    const usernameRegex = /^[a-z0-9]+$/;
+    if (!usernameRegex.test(username)) {
+      return callback({ 
+        success: false, 
+        message: 'Username must contain only lowercase letters and numbers (no spaces or special characters).' 
+      });
     }
 
     if (bannedUsers.has(username)) {
@@ -61,10 +74,10 @@ io.on('connection', (socket) => {
     }
 
     if (users[username]) {
-      return callback({ success: false, message: 'Username already registered.' });
+      return callback({ success: false, message: 'Username already taken.' });
     }
 
-    // 30 Seconds Cooldown per email
+    // 30 Seconds Cooldown
     const now = Date.now();
     if (pendingVerifications[email] && (now - pendingVerifications[email].lastSent < 30000)) {
       const remainingSeconds = Math.ceil((30000 - (now - pendingVerifications[email].lastSent)) / 1000);
@@ -75,7 +88,7 @@ io.on('connection', (socket) => {
     }
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
-    pendingVerifications[email] = { code, username, password, lastSent: now };
+    pendingVerifications[email] = { code, username, displayName, password, lastSent: now };
 
     const resendApiKey = process.env.RESEND_API_KEY;
 
@@ -101,7 +114,7 @@ io.on('connection', (socket) => {
           html: `
             <div style="font-family: Arial, sans-serif; padding: 20px;">
               <h2 style="color: #075e54;">Easy Chat Verification</h2>
-              <p>Hello <b>${username}</b>,</p>
+              <p>Hello <b>${displayName}</b> (@${username}),</p>
               <p>Your verification code to complete your Easy Chat sign-up is:</p>
               <h1 style="color: #25d366; letter-spacing: 4px;">${code}</h1>
             </div>
@@ -137,7 +150,7 @@ io.on('connection', (socket) => {
     users[pending.username] = {
       password: pending.password,
       email: email,
-      verified: true
+      displayName: pending.displayName
     };
 
     delete pendingVerifications[email];
@@ -147,16 +160,18 @@ io.on('connection', (socket) => {
   // Sign In
   socket.on('login', ({ username, password }, callback) => {
     if (!username || !password) {
-      return callback({ success: false, message: 'Name and Password are required.' });
+      return callback({ success: false, message: 'Username and Password are required.' });
     }
 
-    if (bannedUsers.has(username)) {
+    const cleanUsername = username.toLowerCase().trim();
+
+    if (bannedUsers.has(cleanUsername)) {
       return callback({ success: false, message: 'Your account is banned.' });
     }
 
-    const user = users[username];
+    const user = users[cleanUsername];
 
-    if (username === ADMIN_USER) {
+    if (cleanUsername === ADMIN_USERNAME) {
       if (password !== ADMIN_PASS) return callback({ success: false, message: 'Incorrect Admin password.' });
     } else if (!user) {
       return callback({ success: false, message: 'User not found. Please register first.' });
@@ -164,18 +179,46 @@ io.on('connection', (socket) => {
       return callback({ success: false, message: 'Incorrect password.' });
     }
 
-    socket.data.username = username;
-    socket.data.isAdmin = (username === ADMIN_USER);
-    activeSockets[username] = socket.id;
+    socket.data.username = cleanUsername;
+    socket.data.displayName = user ? user.displayName : ADMIN_DISPLAY;
+    socket.data.isAdmin = (cleanUsername === ADMIN_USERNAME);
+    activeSockets[cleanUsername] = socket.id;
 
     callback({ 
       success: true, 
       rooms: getRoomList(), 
-      isAdmin: socket.data.isAdmin 
+      isAdmin: socket.data.isAdmin,
+      displayName: socket.data.displayName,
+      adminMessages: socket.data.isAdmin ? adminDirectMessages : null
     });
   });
 
-  // Create Room
+  // Direct Message to Admin
+  socket.on('send admin message', (msgText, callback) => {
+    const username = socket.data.username;
+    const displayName = socket.data.displayName;
+
+    if (!username) return callback({ success: false, message: 'Must be logged in.' });
+
+    const msgData = {
+      senderUsername: username,
+      senderDisplayName: displayName,
+      text: msgText,
+      timestamp: new Date().toLocaleTimeString()
+    };
+
+    adminDirectMessages.push(msgData);
+
+    // Notify online admin if active
+    const adminSocketId = activeSockets[ADMIN_USERNAME];
+    if (adminSocketId) {
+      io.to(adminSocketId).emit('new admin message', msgData);
+    }
+
+    callback({ success: true, message: 'Feedback sent directly to Admin!' });
+  });
+
+  // Group Rooms Logic
   socket.on('create room', ({ roomName, roomPassword }, callback) => {
     const username = socket.data.username;
     if (!username) return callback({ success: false, message: 'Must be logged in.' });
@@ -188,9 +231,10 @@ io.on('connection', (socket) => {
     callback({ success: true });
   });
 
-  // Join Room
   socket.on('join room', ({ roomName, roomPassword }, callback) => {
     const username = socket.data.username;
+    const displayName = socket.data.displayName;
+
     if (!username) return callback({ success: false, message: 'Must be logged in.' });
 
     const room = rooms[roomName];
@@ -203,7 +247,7 @@ io.on('connection', (socket) => {
     if (socket.data.currentRoom) {
       const oldRoom = socket.data.currentRoom;
       socket.leave(oldRoom);
-      const leaveMsg = { username: 'System', text: `${username} has left ${oldRoom}.`, system: true };
+      const leaveMsg = { username: 'System', displayName: 'System', text: `${displayName} has left ${oldRoom}.`, system: true };
       saveMessage(oldRoom, leaveMsg);
       io.to(oldRoom).emit('chat message', leaveMsg);
     }
@@ -214,42 +258,24 @@ io.on('connection', (socket) => {
     const history = messageHistory[roomName] || [];
     callback({ success: true, history });
 
-    const joinMsg = { username: 'System', text: `${username} joined ${roomName}.`, system: true };
+    const joinMsg = { username: 'System', displayName: 'System', text: `${displayName} joined ${roomName}.`, system: true };
     saveMessage(roomName, joinMsg);
     io.to(roomName).emit('chat message', joinMsg);
   });
 
-  // Delete Room
-  socket.on('delete room', (roomName, callback) => {
-    const username = socket.data.username;
-    const room = rooms[roomName];
-
-    if (!room) return callback({ success: false, message: 'Group does not exist.' });
-    if (roomName === "International Talk") return callback({ success: false, message: 'Cannot delete International Talk.' });
-    if (room.owner !== username && !socket.data.isAdmin) {
-      return callback({ success: false, message: 'Unauthorized.' });
-    }
-
-    delete rooms[roomName];
-    delete messageHistory[roomName];
-    io.to(roomName).emit('room deleted', roomName);
-    broadcastRoomList();
-    callback({ success: true });
-  });
-
-  // Message Handler
   socket.on('chat message', (msgText) => {
     const room = socket.data.currentRoom;
     const username = socket.data.username;
+    const displayName = socket.data.displayName;
 
     if (!room || !username || bannedUsers.has(username)) return;
 
-    const msgData = { username, text: msgText, senderId: socket.id, system: false };
+    const msgData = { username, displayName, text: msgText, senderId: socket.id, system: false };
     saveMessage(room, msgData);
     io.to(room).emit('chat message', msgData);
   });
 
-  // Admin Data
+  // Admin Actions
   socket.on('admin get data', (callback) => {
     if (!socket.data.isAdmin) return callback({ success: false });
     callback({
@@ -257,12 +283,13 @@ io.on('connection', (socket) => {
       activeUsers: Object.keys(activeSockets),
       registeredUsers: Object.keys(users),
       bannedUsers: Array.from(bannedUsers),
-      rooms: Object.keys(rooms)
+      rooms: Object.keys(rooms),
+      feedbackMessages: adminDirectMessages
     });
   });
 
   socket.on('admin kick user', (targetUser, callback) => {
-    if (!socket.data.isAdmin || targetUser === ADMIN_USER) return callback({ success: false });
+    if (!socket.data.isAdmin || targetUser === ADMIN_USERNAME) return callback({ success: false });
     const targetSocketId = activeSockets[targetUser];
     if (targetSocketId) {
       const targetSocket = io.sockets.sockets.get(targetSocketId);
@@ -275,42 +302,14 @@ io.on('connection', (socket) => {
     callback({ success: true });
   });
 
-  socket.on('admin ban user', (targetUser, callback) => {
-    if (!socket.data.isAdmin || targetUser === ADMIN_USER) return callback({ success: false });
-    bannedUsers.add(targetUser);
-    const targetSocketId = activeSockets[targetUser];
-    if (targetSocketId) {
-      const targetSocket = io.sockets.sockets.get(targetSocketId);
-      if (targetSocket) {
-        targetSocket.emit('kicked', 'Banned by Admin.');
-        targetSocket.disconnect();
-      }
-      delete activeSockets[targetUser];
-    }
-    callback({ success: true });
-  });
-
-  socket.on('admin unban user', (targetUser, callback) => {
-    if (!socket.data.isAdmin) return callback({ success: false });
-    bannedUsers.delete(targetUser);
-    callback({ success: true });
-  });
-
-  socket.on('admin clear messages', (roomName, callback) => {
-    if (!socket.data.isAdmin) return callback({ success: false });
-    if (messageHistory[roomName]) {
-      messageHistory[roomName] = [];
-      io.to(roomName).emit('chat cleared');
-      callback({ success: true });
-    }
-  });
-
   socket.on('disconnect', () => {
     const room = socket.data.currentRoom;
     const username = socket.data.username;
+    const displayName = socket.data.displayName;
+
     if (username) delete activeSockets[username];
     if (room && username) {
-      const disconnectMsg = { username: 'System', text: `${username} has left ${room}.`, system: true };
+      const disconnectMsg = { username: 'System', displayName: 'System', text: `${displayName} has left ${room}.`, system: true };
       saveMessage(room, disconnectMsg);
       io.to(room).emit('chat message', disconnectMsg);
     }
