@@ -32,6 +32,23 @@
 
     .toggle-auth { font-size: 12px; text-align: center; color: #075e54; cursor: pointer; text-decoration: underline; margin-top: 5px; }
 
+    /* Top Right Mode Toggle Switch (Admin Only) */
+    #admin-mode-toggle {
+      position: fixed;
+      top: 15px;
+      right: 20px;
+      background: #ff9800;
+      color: white;
+      padding: 8px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: bold;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      z-index: 90;
+      display: none;
+    }
+
     /* Collapsible Bottom-Right Feedback Widget */
     #feedback-widget {
       position: fixed;
@@ -120,6 +137,9 @@
     <div style="font-weight: bold; font-size: 18px;">Connecting to Easy Chat...</div>
   </div>
 
+  <!-- Admin Mode Switcher Button (Top Right, Admin Only) -->
+  <button id="admin-mode-toggle">Switch Mode: Admin</button>
+
   <!-- Auth Modal -->
   <div id="auth-modal" class="modal-overlay" style="display: none;">
     <form id="login-box" class="modal-box" onsubmit="return false;">
@@ -146,7 +166,7 @@
         <button id="verify-code-btn" type="button" class="btn-primary">Verify Code</button>
       </div>
 
-      <!-- Step 3: Registration Form (Age strictly used for approval gate) -->
+      <!-- Step 3: Registration Form -->
       <div id="details-step" style="display: none; flex-direction: column; gap: 8px;">
         <input id="reg-age" type="number" min="1" max="120" placeholder="Age (Used for approval only)" required />
         <div class="input-hint">Age is collected strictly for approval and will NOT be stored.</div>
@@ -164,6 +184,19 @@
 
       <div class="toggle-auth" id="show-login-btn">Already have an account? Sign In</div>
     </form>
+  </div>
+
+  <!-- Create Room Modal -->
+  <div id="create-room-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-box">
+      <h3>➕ Create New Group</h3>
+      <input id="new-room-name" type="text" placeholder="Group Name (e.g. Gamers Hub)" required />
+      <input id="new-room-pass" type="password" placeholder="Password (Optional)" />
+      <div class="modal-actions">
+        <button id="submit-create-room-btn" class="btn-primary">Create Group</button>
+        <button id="close-create-room-btn" class="btn-secondary">Cancel</button>
+      </div>
+    </div>
   </div>
 
   <!-- Collapsible Bottom-Right Feedback Widget -->
@@ -228,6 +261,7 @@
     <div id="sidebar">
       <div id="sidebar-header">
         <span id="user-display">Easy Chat</span>
+        <button id="open-create-room-btn" style="background: #25d366; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; cursor: pointer;">+ New Group</button>
       </div>
 
       <div class="action-bar">
@@ -260,6 +294,7 @@
     let currentDisplayName = null;
     let isAdminUser = false;
     let isCurrentRoomManager = false;
+    let adminActiveMode = "admin"; // "admin" or "user"
     let cooldownTimer = null;
 
     const loadingScreen = document.getElementById('loading-screen');
@@ -294,6 +329,15 @@
     const loginPassword = document.getElementById('login-password');
     const loginBtn = document.getElementById('login-btn');
     const loginError = document.getElementById('login-error');
+
+    const adminModeToggle = document.getElementById('admin-mode-toggle');
+
+    const createRoomModal = document.getElementById('create-room-modal');
+    const openCreateRoomBtn = document.getElementById('open-create-room-btn');
+    const closeCreateRoomBtn = document.getElementById('close-create-room-btn');
+    const submitCreateRoomBtn = document.getElementById('submit-create-room-btn');
+    const newRoomName = document.getElementById('new-room-name');
+    const newRoomPass = document.getElementById('new-room-pass');
 
     const feedbackWidget = document.getElementById('feedback-widget');
     const feedbackHeader = document.getElementById('feedback-header');
@@ -460,9 +504,10 @@
           userDisplay.textContent = `${currentDisplayName}`;
 
           if (isAdminUser) {
-            adminPanelBtn.style.display = 'block';
-            feedbackWidget.style.display = 'none';
+            adminModeToggle.style.display = 'block';
+            updateAdminModeUI();
           } else {
+            adminModeToggle.style.display = 'none';
             adminPanelBtn.style.display = 'none';
             feedbackWidget.style.display = 'flex';
             renderUserFeedbackHistory(res.userFeedbackHistory || []);
@@ -479,9 +524,65 @@
       });
     }
 
+    // Admin Top Right Mode Toggle
+    adminModeToggle.addEventListener('click', () => {
+      adminActiveMode = (adminActiveMode === "admin") ? "user" : "admin";
+      updateAdminModeUI();
+    });
+
+    function updateAdminModeUI() {
+      if (adminActiveMode === "admin") {
+        adminModeToggle.textContent = "Mode: ADMIN 🛡️";
+        adminModeToggle.style.background = "#ff9800";
+        adminPanelBtn.style.display = "block";
+        feedbackWidget.style.display = "none";
+      } else {
+        adminModeToggle.textContent = "Mode: USER 👤";
+        adminModeToggle.style.background = "#0288d1";
+        adminPanelBtn.style.display = "none";
+        feedbackWidget.style.display = "flex";
+      }
+    }
+
     logoutBtn.addEventListener('click', () => {
       localStorage.removeItem('easyChatSession');
       location.reload();
+    });
+
+    socket.on('force logout', (reason) => {
+      alert(reason);
+      localStorage.removeItem('easyChatSession');
+      location.reload();
+    });
+
+    // Room Creation
+    openCreateRoomBtn.addEventListener('click', () => { createRoomModal.style.display = 'flex'; });
+    closeCreateRoomBtn.addEventListener('click', () => { createRoomModal.style.display = 'none'; });
+
+    submitCreateRoomBtn.addEventListener('click', () => {
+      const roomName = newRoomName.value.trim();
+      const roomPassword = newRoomPass.value.trim();
+
+      if (!roomName) return alert('Enter a room name.');
+
+      socket.emit('create room', { roomName, roomPassword }, (res) => {
+        alert(res.message);
+        if (res.success) {
+          createRoomModal.style.display = 'none';
+          newRoomName.value = '';
+          newRoomPass.value = '';
+          joinGroup(roomName, roomPassword);
+        }
+      });
+    });
+
+    socket.on('room list updated', (rooms) => renderRoomList(rooms));
+
+    socket.on('room deleted redirect', ({ roomName }) => {
+      if (activeRoom === roomName) {
+        alert(`The room "${roomName}" was deleted.`);
+        joinGroup("International Talk");
+      }
     });
 
     // Feedback System Widget Controls
@@ -555,7 +656,7 @@
         socket.emit('admin get data', (res) => {
           if (res.success) renderAdminInbox(res.feedbackMessages);
         });
-      } else if (!isAdminUser) {
+      } else if (!isAdminUser || adminActiveMode === "user") {
         appendUserFeedbackItem(updatedFeedback);
       }
     });
@@ -637,19 +738,38 @@
     function renderAdminUsers(users, bannedList) {
       adminUserList.innerHTML = '';
       users.forEach(u => {
-        const isBanned = bannedList.includes(u.username);
         const div = document.createElement('div');
         div.style.padding = '8px';
         div.style.borderBottom = '1px solid #eee';
         div.style.fontSize = '12px';
+        div.style.display = 'flex';
+        div.style.justifySpaceBetween = 'space-between';
+        div.style.alignItems = 'center';
+
         div.innerHTML = `
-          <div style="font-weight:bold;">${escapeHtml(u.displayName)} (@${escapeHtml(u.username)})</div>
-          <div>Real Name: ${escapeHtml(u.realName)} | Email: ${escapeHtml(u.email)}</div>
-          <div style="font-size:10px; color:#888;">IP: ${u.createdIp}</div>
+          <div>
+            <div style="font-weight:bold;">${escapeHtml(u.displayName)} (@${escapeHtml(u.username)})</div>
+            <div>Real Name: ${escapeHtml(u.realName)} | Email: ${escapeHtml(u.email)}</div>
+            <div style="font-size:10px; color:#888;">IP: ${u.createdIp}</div>
+          </div>
+          ${u.username !== 'admin' ? `<button class="btn-danger" onclick="adminDeleteUser('${u.username}')">Delete User</button>` : ''}
         `;
         adminUserList.appendChild(div);
       });
     }
+
+    window.adminDeleteUser = function(targetUsername) {
+      if (confirm(`Permanently delete account @${targetUsername}?`)) {
+        socket.emit('admin delete user', { targetUsername }, (res) => {
+          alert(res.message);
+          if (res.success) {
+            socket.emit('admin get data', (adminRes) => {
+              if (adminRes.success) renderAdminUsers(adminRes.registeredUsers, adminRes.bannedUsers);
+            });
+          }
+        });
+      }
+    };
 
     bulkUploadSubmitBtn.addEventListener('click', () => {
       const rawText = bulkUploadText.value.trim();
@@ -677,14 +797,29 @@
           ? `<b>International Talk</b>` 
           : `# ${escapeHtml(room.name)}`;
 
-        li.innerHTML = `<span>${label}</span>`;
+        let deleteBtn = '';
+        if (room.name !== "International Talk" && (isAdminUser || room.isManager)) {
+          deleteBtn = `<span class="msg-action" style="color:#d9534f; font-size:11px;" onclick="event.stopPropagation(); deleteGroup('${room.name}')">🗑️ Delete</span>`;
+        }
+
+        li.innerHTML = `<span>${label}</span> ${deleteBtn}`;
         li.addEventListener('click', () => joinGroup(room.name));
         roomListEl.appendChild(li);
       });
     }
 
-    function joinGroup(roomName) {
-      socket.emit('join room', { roomName }, (res) => {
+    window.deleteGroup = function(roomName) {
+      if (confirm(`Are you sure you want to delete the group "${roomName}"?`)) {
+        socket.emit('delete room', { roomName }, (res) => {
+          if (!res.success) alert(res.message);
+        });
+      }
+    };
+
+    function joinGroup(roomName, roomPassword = null) {
+      if (activeRoom === roomName) return; // Prevent double-join glitch
+
+      socket.emit('join room', { roomName, roomPassword }, (res) => {
         if (res.success) {
           activeRoom = roomName;
           isCurrentRoomManager = res.isManager;
@@ -696,6 +831,11 @@
           if (res.history) {
             res.history.forEach(msg => renderSingleMessage(msg));
           }
+        } else if (res.message === 'Incorrect room password.') {
+          const passPrompt = prompt(`Enter password for room "${roomName}":`);
+          if (passPrompt) joinGroup(roomName, passPrompt);
+        } else {
+          alert(res.message);
         }
       });
     }
