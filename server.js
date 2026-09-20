@@ -54,7 +54,7 @@ const roomSchema = new mongoose.Schema({
   isPrivate: { type: Boolean, default: false },
   owner: { type: String, required: true },
   managers: [{ type: String }],
-  members: [{ type: String }] // List of allowed usernames for private groups
+  members: [{ type: String }]
 });
 
 const feedbackSchema = new mongoose.Schema({
@@ -421,17 +421,16 @@ io.on('connection', (socket) => {
     callback({ success: true, message: `Room "${roomName}" has been deleted.` });
   });
 
-  // Join Room (Access checks for Private / Specific Members)
+  // Join Room (System Join/Leave Messages Removed)
   socket.on('join room', async ({ roomName, roomPassword }, callback) => {
     const username = socket.data.username;
-    const displayName = socket.data.displayName;
 
     if (!username) return callback({ success: false, message: 'Must be logged in.' });
 
     if (socket.data.currentRoom === roomName) {
       let currentHistory = [];
       if (mongoose.connection.readyState === 1) {
-        currentHistory = await Message.find({ roomName }).sort({ timestamp: -1 }).limit(200);
+        currentHistory = await Message.find({ roomName, system: { $ne: true } }).sort({ timestamp: -1 }).limit(200);
         currentHistory.reverse();
       }
       return callback({ success: true, history: currentHistory, rejoining: true });
@@ -453,24 +452,16 @@ io.on('connection', (socket) => {
       }
 
       if (socket.data.currentRoom) {
-        const oldRoom = socket.data.currentRoom;
-        socket.leave(oldRoom);
-        const leaveMsg = { roomName: oldRoom, username: 'System', displayName: 'System', text: `${displayName} has left ${oldRoom}.`, system: true };
-        await Message.create(leaveMsg);
-        io.to(oldRoom).emit('chat message', leaveMsg);
+        socket.leave(socket.data.currentRoom);
       }
 
       socket.join(roomName);
       socket.data.currentRoom = roomName;
 
-      const history = await Message.find({ roomName }).sort({ timestamp: -1 }).limit(200);
+      const history = await Message.find({ roomName, system: { $ne: true } }).sort({ timestamp: -1 }).limit(200);
       history.reverse();
 
       callback({ success: true, history, isManager });
-
-      const joinMsg = { roomName, username: 'System', displayName: 'System', text: `${displayName} joined ${roomName}.`, system: true };
-      await Message.create(joinMsg);
-      io.to(roomName).emit('chat message', joinMsg);
     }
   });
 
@@ -679,16 +670,8 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    const room = socket.data.currentRoom;
     const username = socket.data.username;
-    const displayName = socket.data.displayName;
-
     if (username) delete activeSockets[username];
-    if (room && username) {
-      const disconnectMsg = { roomName: room, username: 'System', displayName: 'System', text: `${displayName} has left ${room}.`, system: true };
-      if (mongoose.connection.readyState === 1) Message.create(disconnectMsg);
-      io.to(room).emit('chat message', disconnectMsg);
-    }
   });
 });
 
