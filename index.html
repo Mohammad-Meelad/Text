@@ -107,12 +107,10 @@
     .message-wrapper { display: flex; flex-direction: column; max-width: 70%; position: relative; }
     .message-wrapper.sent { align-self: flex-end; }
     .message-wrapper.received { align-self: flex-start; }
-    .message-wrapper.system { align-self: center; max-width: 90%; }
     .sender-name { font-size: 11px; color: #666; margin-bottom: 2px; margin-left: 4px; font-weight: 600; }
     .message-bubble { padding: 8px 12px; border-radius: 8px; font-size: 14px; line-height: 1.4; word-wrap: break-word; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; }
     .sent .message-bubble { background-color: #dcf8c6; border-top-right-radius: 0; }
     .received .message-bubble { background-color: #ffffff; border-top-left-radius: 0; }
-    .system .message-bubble { background-color: rgba(225, 245, 254, 0.9); color: #555; font-size: 12px; border-radius: 12px; padding: 4px 12px; }
 
     .msg-controls { font-size: 10px; color: #888; display: flex; gap: 8px; margin-top: 3px; justify-content: flex-end; }
     .msg-action { cursor: pointer; text-decoration: underline; }
@@ -843,7 +841,6 @@
         const li = document.createElement('li');
         li.classList.add('room-item');
         
-        // Dynamically turn ONLY the currently active group green
         if (room.name === activeRoom) {
           li.classList.add('active');
         }
@@ -877,7 +874,7 @@
     };
 
     function joinGroup(roomName, roomPassword = null) {
-      if (activeRoom === roomName) return; // Prevent double-join glitch
+      if (activeRoom === roomName) return;
 
       socket.emit('join room', { roomName, roomPassword }, (res) => {
         if (res.success) {
@@ -888,7 +885,7 @@
           messageInput.disabled = false;
           sendBtn.disabled = false;
 
-          renderRoomList(cachedRooms); // Refresh room list to make current group green
+          renderRoomList(cachedRooms);
 
           if (res.history) {
             res.history.forEach(msg => renderSingleMessage(msg));
@@ -913,31 +910,28 @@
     socket.on('chat message', (data) => renderSingleMessage(data));
 
     function renderSingleMessage(data) {
+      if (data.system) return; // Prevent system messages from rendering
+
       const wrapper = document.createElement('div');
       wrapper.classList.add('message-wrapper');
       if (data._id) wrapper.id = `msg-${data._id}`;
 
-      if (data.system) {
-        wrapper.classList.add('system');
-        wrapper.innerHTML = `<div class="message-bubble">${data.text}</div>`;
-      } else {
-        const isSelf = data.username === currentUser;
-        wrapper.classList.add(isSelf ? 'sent' : 'received');
+      const isSelf = data.username === currentUser;
+      wrapper.classList.add(isSelf ? 'sent' : 'received');
 
-        let controlsHtml = `
-          <div class="msg-controls">
-            <span class="msg-action" onclick="deleteForSelf(this)">Delete for Me</span>
-            ${(isCurrentRoomManager && data._id) ? `<span class="msg-action" onclick="deleteForEveryone('${data._id}')">Delete Everyone</span>` : ''}
-            ${(isCurrentRoomManager) ? `<span class="msg-action" onclick="deleteUserMessages('${data.username}')">Delete All by User</span>` : ''}
-          </div>
-        `;
+      let controlsHtml = `
+        <div class="msg-controls">
+          <span class="msg-action" onclick="deleteForSelf(this)">Delete for Me</span>
+          ${(isCurrentRoomManager && data._id) ? `<span class="msg-action" onclick="deleteForEveryone('${data._id}')">Delete Everyone</span>` : ''}
+          ${(isCurrentRoomManager) ? `<span class="msg-action" onclick="deleteUserMessages('${data.username}')">Delete All by User</span>` : ''}
+        </div>
+      `;
 
-        wrapper.innerHTML = `
-          ${!isSelf ? `<span class="sender-name">${escapeHtml(data.displayName)} (@${escapeHtml(data.username)})</span>` : ''}
-          <div class="message-bubble">${escapeHtml(data.text)}</div>
-          ${controlsHtml}
-        `;
-      }
+      wrapper.innerHTML = `
+        ${!isSelf ? `<span class="sender-name">${escapeHtml(data.displayName)} (@${escapeHtml(data.username)})</span>` : ''}
+        <div class="message-bubble">${escapeHtml(data.text)}</div>
+        ${controlsHtml}
+      `;
 
       chatBox.appendChild(wrapper);
       chatBox.scrollTop = chatBox.scrollHeight;
